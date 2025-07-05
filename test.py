@@ -112,7 +112,7 @@ class LiveTester:
                 pygame.draw.circle(self.screen, (0, 255, 0), (int(pred_x), int(pred_y)), 20)
                 
                 # Draw a line from the webcam to the predicted position
-                pygame.draw.line(self.screen, (255, 0, 0), (220, 220), (int(pred_x), int(pred_y)), 2)
+                pygame.draw.line(self.screen, (255, 0, 0), (self.width//2, self.height//2), (int(pred_x), int(pred_y)), 2)
                 
                 # Display prediction coordinates
                 font = pygame.font.Font(None, 36)

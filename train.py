@@ -229,7 +229,7 @@ def main():
     
     # Train the model with early stopping
     num_epochs = 50
-    train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, patience=10)
+    train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, patience=5)
     
     # Load the best model for visualization
     model = Model()

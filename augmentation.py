@@ -72,11 +72,15 @@ def apply_augmentations(image_tensor):
     hue_shift = lambda x: tf.image.adjust_hue(x, delta=0.4)
     augmented_images.append(hue_shift(image_tensor))
     
-    # 3. RGB shift (brightness and contrast)
-    brightness_contrast = lambda x: tf.image.adjust_contrast(tf.image.adjust_brightness(x, delta=0.5), 1.3)
-    augmented_images.append(brightness_contrast(image_tensor))
+    # 3. Saturation shift increase
+    saturation_shift = lambda x: tf.image.adjust_saturation(x, 1.5)
+    augmented_images.append(saturation_shift(image_tensor))
+
+    # 4. Saturation shift decrease
+    saturation_shift = lambda x: tf.image.adjust_saturation(x, 0.5)
+    augmented_images.append(saturation_shift(image_tensor))
     
-    # 4. Combined hue and brightness shift
+    # 5. Combined hue and brightness shift
     combined_shift = lambda x: tf.image.adjust_brightness(tf.image.adjust_hue(x, delta=0.7), delta=0.3)
     augmented_images.append(combined_shift(image_tensor))
     

@@ -74,6 +74,8 @@ class LiveTester:
         with torch.no_grad():
             predictions = self.model(image_tensor)
         
+        print(f"Predicted x: {predictions[0, 0].item()}, y: {predictions[0, 1].item()}")
+        
         # Get x, y coordinates (denormalize)
         x = predictions[0, 0].item() * self.width
         y = predictions[0, 1].item() * self.height
@@ -100,7 +102,6 @@ class LiveTester:
             if model_input is not None and display_frame is not None:
                 # Make prediction
                 pred_x, pred_y = self.predict_gaze(model_input)
-                print(pred_x, pred_y)
                 
                 # Convert numpy array to pygame surface for display
                 webcam_surface = pygame.surfarray.make_surface(display_frame.swapaxes(0, 1))

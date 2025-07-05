@@ -5,7 +5,7 @@ import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader, random_split, Subset
 import pandas as pd
 import cv2
 import numpy as np
@@ -13,6 +13,8 @@ from model import Model
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torchvision import transforms
+import re
+from sklearn.model_selection import train_test_split
 
 class ToTensorRGB(object):
     """Convert numpy image to PyTorch tensor and normalize."""
@@ -24,6 +26,20 @@ class EyeTrackerDataset(Dataset):
     def __init__(self, csv_file, transform=None):
         self.data = pd.read_csv(csv_file)
         self.transform = transform
+        
+        # Extract original image IDs for stratification
+        self.original_ids = []
+        for img_path in self.data.iloc[:, 0]:
+            # Extract original image ID from filename (remove augmentation suffix)
+            match = re.search(r'(\d+)_\d+\.jpg$', os.path.basename(img_path))
+            if match:
+                self.original_ids.append(match.group(1))
+            else:
+                # If no match (original image), use the whole filename
+                base_name = os.path.splitext(os.path.basename(img_path))[0]
+                self.original_ids.append(base_name)
+        
+        self.original_ids = np.array(self.original_ids)
         
     def __len__(self):
         return len(self.data)
@@ -122,6 +138,7 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.legend()
+    plt.ylim(0, max(max(train_losses), max(val_losses)))
     plt.savefig('loss_plot.png')
     
     return train_losses, val_losses
@@ -204,17 +221,33 @@ def main():
     if len(dataset) == 0:
         raise ValueError("Dataset is empty. Please run dataset_generator.py first.")
     
-    # Split dataset into train and validation sets (80/20)
-    train_size = int(0.8 * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+    # Stratify split based on original image IDs
+    unique_ids = np.unique(dataset.original_ids)
+    
+    # Get indices for each unique original image ID
+    id_to_indices = {}
+    for id_val in unique_ids:
+        id_to_indices[id_val] = np.where(dataset.original_ids == id_val)[0]
+    
+    # Split the unique IDs into train and validation
+    train_ids, val_ids = train_test_split(unique_ids, test_size=0.2, random_state=42)
+    
+    # Collect indices for train and validation
+    train_indices = []
+    for id_val in train_ids:
+        train_indices.extend(id_to_indices[id_val])
+    
+    val_indices = []
+    for id_val in val_ids:
+        val_indices.extend(id_to_indices[id_val])
+    
+    # Create train and validation subsets
+    train_dataset = Subset(dataset, train_indices)
+    val_dataset = Subset(dataset, val_indices)
 
     # Print dataset size
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Validation dataset size: {len(val_dataset)}")
-
-    # Print first sample of train_dataset
-    print(train_dataset[0])
     
     # Create data loaders - set num_workers=0 to avoid multiprocessing issues
     train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=0)

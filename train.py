@@ -54,7 +54,6 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
     
     # Early stopping variables
     counter = 0
-    early_stop = False
     
     for epoch in range(num_epochs):
         # Training phase
@@ -115,7 +114,6 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
             print(f"Early stopping counter: {counter}/{patience}")
             if counter >= patience:
                 print(f"Early stopping triggered after {epoch+1} epochs")
-                early_stop = True
                 break
     
     # Plot losses
@@ -130,6 +128,62 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
     plt.show()
     
     return train_losses, val_losses
+
+
+def visualize_predictions(model, val_loader, device):
+    """
+    Visualize the predicted vs actual gaze points on a 2D plane.
+    
+    Args:
+        model: The trained model
+        val_loader: Validation data loader
+        device: Device to run inference on
+    """
+    # Set model to evaluation mode
+    model.eval()
+    
+    # Lists to store actual and predicted coordinates
+    actual_coords = []
+    pred_coords = []
+    
+    # Get predictions from validation set
+    with torch.no_grad():
+        for images, targets in tqdm(val_loader, desc="Generating predictions"):
+            images = images.to(device)
+            outputs = model(images)
+            
+            # Move to CPU and convert to numpy
+            targets = targets.cpu().numpy()
+            outputs = outputs.cpu().numpy()
+            
+            # Add to lists
+            actual_coords.extend(targets)
+            pred_coords.extend(outputs)
+    
+    # Convert to numpy arrays
+    actual_coords = np.array(actual_coords)
+    pred_coords = np.array(pred_coords)
+    
+    # Plot the results
+    plt.figure(figsize=(10, 10))
+    plt.scatter(actual_coords[:, 0], actual_coords[:, 1], c='blue', alpha=0.5, label='Actual')
+    plt.scatter(pred_coords[:, 0], pred_coords[:, 1], c='red', alpha=0.5, label='Predicted')
+    
+    # Add reference lines for x=y
+    plt.axhline(y=0.5, color='gray', linestyle='--', alpha=0.3)
+    plt.axvline(x=0.5, color='gray', linestyle='--', alpha=0.3)
+    
+    # Set limits (assuming coordinates are normalized between 0 and 1)
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
+    
+    plt.title('Gaze Estimation Results: Actual vs Predicted Coordinates')
+    plt.xlabel('X Coordinate')
+    plt.ylabel('Y Coordinate')
+    plt.legend()
+    plt.grid(alpha=0.3)
+    plt.savefig('prediction_visualization.png')
+    plt.show()
 
 
 def main():
@@ -175,7 +229,15 @@ def main():
     num_epochs = 50
     train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, patience=5)
     
-    print("Training complete!")
+    # Load the best model for visualization
+    model = Model()
+    model.load_model("best_model.pth")
+    model.to(device)
+    
+    # Visualize predictions
+    visualize_predictions(model, val_loader, device)
+    
+    print("Training and visualization complete!")
 
 
 if __name__ == "__main__":

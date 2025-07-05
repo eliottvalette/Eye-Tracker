@@ -228,7 +228,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     
     # Train the model with early stopping
-    num_epochs = 50
+    num_epochs = 25
     train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, patience=5)
     
     # Load the best model for visualization

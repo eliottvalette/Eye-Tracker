@@ -45,6 +45,15 @@ def create_augmented_directory():
         shutil.rmtree("Augmented_Dataset")
         os.makedirs("Augmented_Dataset")
 
+def clear_augmented_directory():
+    """Delete all images in Augmented_Dataset directory"""
+    if os.path.exists("Augmented_Dataset"):
+        for filename in os.listdir("Augmented_Dataset"):
+            file_path = os.path.join("Augmented_Dataset", filename)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+        print("Cleared all images from Augmented_Dataset directory")
+
 def load_and_preprocess_image(image_path):
     """Load an image and convert it to a tensor"""
     img = cv2.imread(image_path)
@@ -60,15 +69,15 @@ def apply_augmentations(image_tensor):
     augmented_images.append(image_tensor)
     
     # 2. Hue shift
-    hue_shift = lambda x: tf.image.adjust_hue(x, delta=0.2)
+    hue_shift = lambda x: tf.image.adjust_hue(x, delta=0.4)
     augmented_images.append(hue_shift(image_tensor))
     
-    # 3. RGB shift (brightness)
-    brightness_shift = lambda x: tf.image.adjust_brightness(x, delta=0.4)
-    augmented_images.append(brightness_shift(image_tensor))
+    # 3. RGB shift (brightness and contrast)
+    brightness_contrast = lambda x: tf.image.adjust_contrast(tf.image.adjust_brightness(x, delta=0.5), 1.3)
+    augmented_images.append(brightness_contrast(image_tensor))
     
     # 4. Combined hue and brightness shift
-    combined_shift = lambda x: tf.image.adjust_brightness(tf.image.adjust_hue(x, delta=0.3), delta=0.3)
+    combined_shift = lambda x: tf.image.adjust_brightness(tf.image.adjust_hue(x, delta=0.7), delta=0.3)
     augmented_images.append(combined_shift(image_tensor))
     
     return augmented_images
@@ -84,6 +93,9 @@ def save_augmented_image(image_tensor, output_path):
 def main():
     # Create or clean Augmented_Dataset directory
     create_augmented_directory()
+    
+    # Clear all existing images before adding new ones
+    clear_augmented_directory()
     
     # Load original dataset
     original_dataset = pd.read_csv("dataset.csv")
@@ -129,4 +141,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

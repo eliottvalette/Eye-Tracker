@@ -1,11 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import torchvision.transforms as transforms
-import torchvision.datasets as datasets
-import torchvision.models as models
-import torch.nn.functional as F
-import torch.utils.data as data
 
 class Model(nn.Module):
     def __init__(self):
@@ -28,11 +22,24 @@ class Model(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2),
         )
+        # For 224x224 input, the feature map size after pass_3 will be 14x14
+        self.fc = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(128 * 14 * 14, 512),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(512, 128),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(128, 2)  # Output x, y coordinates
+        )
     
     def forward(self, x):
         x = self.pass_1(x)
         x = self.pass_2(x)
         x = self.pass_3(x)
+        x = self.fc(x)
+        x = torch.sigmoid(x)  # Apply sigmoid to normalize output to [0,1]
         return x
     
     def save_model(self, path):

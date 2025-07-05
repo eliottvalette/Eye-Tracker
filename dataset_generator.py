@@ -1,3 +1,16 @@
+"""
+Dataset generator
+
+This script is used to generate a dataset of images and their corresponding x, y coordinates.
+It uses a webcam to capture images and a circle to indicate the target on the screen.
+The user has to look at the circle.
+
+The dataset is saved in a csv file.
+The csv file contains the following columns:
+- img_filename: the filename of the image
+- x: the x coordinate of the target
+- y: the y coordinate of the target
+"""
 import pygame
 import numpy as np
 import random as rd
@@ -5,6 +18,8 @@ import os
 import pandas as pd
 import cv2
 import time
+
+TIME = 120
 
 class DatasetGenerator:
     def __init__(self, width=1500, height=840):
@@ -20,8 +35,8 @@ class DatasetGenerator:
     def run_dataset_generator(self):
         start_time = time.time()
         old_sample_idx = -1
-        # 10 seconds
-        while time.time() - start_time < 6:
+        
+        while time.time() - start_time < TIME:
             sample_idx = (time.time() - start_time) // 2
             time_remaining_before_photo = (time.time() - start_time) % 2
 
@@ -36,6 +51,11 @@ class DatasetGenerator:
             font = pygame.font.Font(None, 96)
             text = font.render(f"{time_remaining_before_photo:.1f}s", True, (255, 255, 255))
             self.screen.blit(text, (self.width / 2, self.height / 2))
+
+            # Add progress bar below the text
+            progress_bar = pygame.Rect(0, self.height - 50, self.width, 20)
+            pygame.draw.rect(self.screen, (255, 255, 255), progress_bar)
+            pygame.draw.rect(self.screen, (0, 255, 0), (0, self.height - 50, self.width * (time.time() - start_time) / TIME, 20))
 
             # Draw a circle on the screen
             pygame.draw.circle(self.screen, (255, 0, 0), (x, y), 20)
@@ -59,6 +79,10 @@ class DatasetGenerator:
         cap = cv2.VideoCapture(0)
         ret, frame = cap.read()
         if ret:
+            # Crop img to 1080x1080
+            right_x = 1920 // 2 + 1080 // 2
+            left_x = 1920 // 2 - 1080 // 2
+            frame = frame[:, left_x:right_x, :]
             # Resize to 224x224
             frame = cv2.resize(frame, (224, 224))
             # Save the image 

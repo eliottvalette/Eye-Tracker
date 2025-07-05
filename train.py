@@ -21,7 +21,6 @@ class ToTensorRGB(object):
         # Convert from numpy to tensor and normalize
         return torch.from_numpy(image.transpose((2, 0, 1))).float() / 255.0
 
-
 class EyeTrackerDataset(Dataset):
     def __init__(self, csv_file, transform=None):
         self.data = pd.read_csv(csv_file)
@@ -125,12 +124,11 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
     plt.ylabel('Loss')
     plt.legend()
     plt.savefig('loss_plot.png')
-    plt.show()
     
     return train_losses, val_losses
 
 
-def visualize_predictions(model, val_loader, device):
+def visualize_predictions(model, loader, device, name):
     """
     Visualize the predicted vs actual gaze points on a 2D plane.
     
@@ -148,7 +146,7 @@ def visualize_predictions(model, val_loader, device):
     
     # Get predictions from validation set
     with torch.no_grad():
-        for images, targets in tqdm(val_loader, desc="Generating predictions"):
+        for images, targets in tqdm(loader, desc=f"Generating predictions for {name}"):
             images = images.to(device)
             outputs = model(images)
             
@@ -182,9 +180,7 @@ def visualize_predictions(model, val_loader, device):
     plt.ylabel('Y Coordinate')
     plt.legend()
     plt.grid(alpha=0.3)
-    plt.savefig('prediction_visualization.png')
-    plt.show()
-
+    plt.savefig(f'prediction_visualization_{name}.png')
 
 def main():
     # Set device
@@ -213,10 +209,17 @@ def main():
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+
+    # Print dataset size
+    print(f"Train dataset size: {len(train_dataset)}")
+    print(f"Validation dataset size: {len(val_dataset)}")
+
+    # Print first sample of train_dataset
+    print(train_dataset[0])
     
     # Create data loaders - set num_workers=0 to avoid multiprocessing issues
-    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=0)
-    val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False, num_workers=0)
+    train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True, num_workers=0)
+    val_loader = DataLoader(val_dataset, batch_size=4, shuffle=False, num_workers=0)
     
     # Initialize model
     model = Model()
@@ -227,7 +230,7 @@ def main():
     
     # Train the model with early stopping
     num_epochs = 50
-    train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, patience=5)
+    train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, patience=25)
     
     # Load the best model for visualization
     model = Model()
@@ -235,7 +238,8 @@ def main():
     model.to(device)
     
     # Visualize predictions
-    visualize_predictions(model, val_loader, device)
+    visualize_predictions(model, train_loader, device, "train")
+    visualize_predictions(model, val_loader, device, "val")
     
     print("Training and visualization complete!")
 

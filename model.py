@@ -17,15 +17,10 @@ class Model(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2),
         )
-        self.pass_3 = nn.Sequential(
-            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-        )
         # For 224x224 input, the feature map size after pass_3 will be 14x14
         self.fc = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(128 * 14 * 14, 512),
+            nn.Linear(4 * 64 * 14 * 14, 512),
             nn.ReLU(),
             nn.Dropout(0.5),
             nn.Linear(512, 128),
@@ -37,7 +32,6 @@ class Model(nn.Module):
     def forward(self, x):
         x = self.pass_1(x)
         x = self.pass_2(x)
-        x = self.pass_3(x)
         x = self.fc(x)
         x = torch.sigmoid(x)  # Apply sigmoid to normalize output to [0,1]
         return x

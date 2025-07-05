@@ -38,7 +38,7 @@ class DatasetGenerator:
         
         while time.time() - start_time < TIME:
             sample_idx = (time.time() - start_time) // 1
-            time_remaining_before_photo = (time.time() - start_time) % 1
+            time_remaining_before_photo = 1 - (time.time() - start_time) % 1
 
             if sample_idx != old_sample_idx:
                 self.photo_taken = False
@@ -63,6 +63,7 @@ class DatasetGenerator:
             pygame.display.flip()
 
             # If time_remaining_before_photo is 0, take a photo
+            print(time_remaining_before_photo)
             if time_remaining_before_photo <= 0.1 and not self.photo_taken:
                 self.webcam_photo(x, y)
                 self.photo_taken = True

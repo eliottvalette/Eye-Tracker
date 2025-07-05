@@ -22,10 +22,10 @@ class Model(nn.Module):
             nn.Flatten(),
             nn.Linear(4 * 64 * 14 * 14, 512),
             nn.ReLU(),
-            nn.Dropout(0.5),
+            nn.Dropout(0.1),
             nn.Linear(512, 128),
             nn.ReLU(),
-            nn.Dropout(0.3),
+            nn.Dropout(0.1),
             nn.Linear(128, 2)  # Output x, y coordinates
         )
     

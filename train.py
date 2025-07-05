@@ -14,7 +14,6 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torchvision import transforms
 
-
 class ToTensorRGB(object):
     """Convert numpy image to PyTorch tensor and normalize."""
     def __call__(self, image):
@@ -184,7 +183,7 @@ def visualize_predictions(model, loader, device, name):
 
 def main():
     # Set device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
     
     # Set random seed for reproducibility
@@ -199,7 +198,7 @@ def main():
     ])
     
     # Create dataset
-    dataset = EyeTrackerDataset(csv_file="dataset.csv", transform=transform)
+    dataset = EyeTrackerDataset(csv_file="augmented_dataset.csv", transform=transform)
     
     # Check if dataset is not empty
     if len(dataset) == 0:
@@ -218,8 +217,8 @@ def main():
     print(train_dataset[0])
     
     # Create data loaders - set num_workers=0 to avoid multiprocessing issues
-    train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True, num_workers=0)
-    val_loader = DataLoader(val_dataset, batch_size=4, shuffle=False, num_workers=0)
+    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=0)
+    val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False, num_workers=0)
     
     # Initialize model
     model = Model()
@@ -230,7 +229,7 @@ def main():
     
     # Train the model with early stopping
     num_epochs = 50
-    train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, patience=25)
+    train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, patience=10)
     
     # Load the best model for visualization
     model = Model()

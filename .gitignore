@@ -1,3 +1,4 @@
 Dataset/
 Augmented_Dataset/
 .venv/
+__pycache__/

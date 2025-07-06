@@ -31,6 +31,8 @@ class DatasetGenerator:
         self.clock = pygame.time.Clock()
         self.photo_taken = False
         self.temp_df = pd.DataFrame(columns=["img_filename", "x", "y"])
+        # Initialize webcam once
+        self.cap = cv2.VideoCapture(0)
     
     def run_dataset_generator(self):
         start_time = time.time()
@@ -70,15 +72,17 @@ class DatasetGenerator:
 
             old_sample_idx = sample_idx
         
+        # Release webcam when done
+        self.release_webcam()
+        
 
     def webcam_photo(self, x, y):
         # Generate unique image filename with timestamp and sample index
         uid = f"{int(time.time())}"
         img_filename = f"Dataset/{uid}.jpg"
         
-        # Capture image from webcam
-        cap = cv2.VideoCapture(0)
-        ret, frame = cap.read()
+        # Use the existing webcam connection
+        ret, frame = self.cap.read()
         if ret:
             # Crop img to 1080x1080
             right_x = 1920 // 2 + 1080 // 2
@@ -93,8 +97,11 @@ class DatasetGenerator:
             norm_y = y / self.height
             new_row = pd.DataFrame([{"img_filename": img_filename, "x": norm_x, "y": norm_y}])
             self.temp_df = pd.concat([self.temp_df, new_row], ignore_index=True)
-            
-        cap.release()
+    
+    def release_webcam(self):
+        """Release the webcam resources"""
+        if hasattr(self, 'cap') and self.cap.isOpened():
+            self.cap.release()
 
     def load_dataset_df(self):
         if os.path.exists("dataset.csv"):

@@ -14,6 +14,8 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torchvision import transforms
 
+LOAD_MODEL = False
+
 class ToTensorRGB(object):
     """Convert numpy image to PyTorch tensor and normalize."""
     def __call__(self, image):
@@ -340,6 +342,8 @@ def main():
     
     # Initialize model
     model = Model()
+    if LOAD_MODEL:
+        model.load_model("best_model.pth")
     
     # Define loss function and optimizer
     criterion = nn.L1Loss()

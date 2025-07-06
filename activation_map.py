@@ -333,8 +333,7 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
 
 if __name__ == "__main__":
     # Run live activation map visualization
+    analyze_dataset_samples("Dataset", num_samples=20) 
+
     visualizer = ActivationMapVisualizer()
     visualizer.run()
-    
-    # Uncomment to analyze dataset samples
-    # analyze_dataset_samples("Dataset", num_samples=5) 

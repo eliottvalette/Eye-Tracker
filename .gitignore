@@ -3,3 +3,4 @@ Augmented_Dataset/
 .venv/
 __pycache__/
 .DS_Store
+*.pth

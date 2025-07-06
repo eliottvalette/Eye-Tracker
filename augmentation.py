@@ -68,21 +68,21 @@ def apply_augmentations(image_tensor):
     # 1. Original image (no augmentation)
     augmented_images.append(image_tensor)
     
-    # 2. Hue shift
-    hue_shift = lambda x: tf.image.adjust_hue(x, delta=0.4)
-    augmented_images.append(hue_shift(image_tensor))
+    # Helper function for horizontal translation
+    def horizontal_translation(img, pixels=20):
+        # Create translation matrix
+        translated = tf.roll(img, shift=pixels, axis=1)  # Shift horizontally
+        return translated
     
-    # 3. Saturation shift increase
-    saturation_shift = lambda x: tf.image.adjust_saturation(x, 1.5)
-    augmented_images.append(saturation_shift(image_tensor))
+    # 2. Saturation shift increase + horizontal shift right
+    saturation_increase = tf.image.adjust_saturation(image_tensor, 1.5)
+    saturation_increase_shifted = horizontal_translation(saturation_increase, 20)
+    augmented_images.append(saturation_increase_shifted)
 
-    # 4. Saturation shift decrease
-    saturation_shift = lambda x: tf.image.adjust_saturation(x, 0.5)
-    augmented_images.append(saturation_shift(image_tensor))
-    
-    # 5. Combined hue and brightness shift
-    combined_shift = lambda x: tf.image.adjust_brightness(tf.image.adjust_hue(x, delta=0.7), delta=0.3)
-    augmented_images.append(combined_shift(image_tensor))
+    # 3. Saturation shift decrease + horizontal shift left
+    saturation_decrease = tf.image.adjust_saturation(image_tensor, 0.5)
+    saturation_decrease_shifted = horizontal_translation(saturation_decrease, -20)
+    augmented_images.append(saturation_decrease_shifted)    
     
     return augmented_images
 

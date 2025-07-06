@@ -13,8 +13,6 @@ from model import Model
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from torchvision import transforms
-import re
-from sklearn.model_selection import train_test_split
 
 class ToTensorRGB(object):
     """Convert numpy image to PyTorch tensor and normalize."""
@@ -26,20 +24,6 @@ class EyeTrackerDataset(Dataset):
     def __init__(self, csv_file, transform=None):
         self.data = pd.read_csv(csv_file)
         self.transform = transform
-        
-        # Extract original image IDs for stratification
-        self.original_ids = []
-        for img_path in self.data.iloc[:, 0]:
-            # Extract original image ID from filename (remove augmentation suffix)
-            match = re.search(r'(\d+)_\d+\.jpg$', os.path.basename(img_path))
-            if match:
-                self.original_ids.append(match.group(1))
-            else:
-                # If no match (original image), use the whole filename
-                base_name = os.path.splitext(os.path.basename(img_path))[0]
-                self.original_ids.append(base_name)
-        
-        self.original_ids = np.array(self.original_ids)
         
     def __len__(self):
         return len(self.data)
@@ -59,12 +43,43 @@ class EyeTrackerDataset(Dataset):
         
         return image, coordinates
 
-
 def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, save_path="best_model.pth", patience=5):
     model.to(device)
     best_val_loss = float('inf')
     train_losses = []
     val_losses = []
+
+    # Before Launching the real training, we'll overfit on one batch to set up the weights
+    model.train()
+    # Get a single batch for overfitting
+    images, targets = next(iter(train_loader))
+    images = images.to(device)
+    targets = targets.to(device)
+    
+    print("Overfitting on a single batch to set up weights...")
+    # Train for a few iterations on this single batch
+    for i in range(100):  # 100 iterations should be enough to overfit
+        # Zero the gradients
+        optimizer.zero_grad()
+        
+        # Forward pass
+        outputs = model(images)
+        loss = criterion(outputs, targets)
+        
+        # Backward pass and optimize
+        loss.backward()
+        optimizer.step()
+        
+        # Print progress every 10 iterations
+        if (i + 1) % 10 == 0:
+            print(f"Overfit iteration {i+1}/100, Loss: {loss.item():.6f}")
+            
+            # If loss is very low, we can stop early
+            if loss.item() < 0.001:
+                print("Achieved very low loss, stopping overfit phase.")
+                break
+    
+    print("Overfit phase complete. Starting main training loop.")
     
     # Early stopping variables
     counter = 0
@@ -138,7 +153,6 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.legend()
-    plt.ylim(0, max(max(train_losses), max(val_losses)))
     plt.savefig('loss_plot.png')
     
     return train_losses, val_losses
@@ -178,10 +192,33 @@ def visualize_predictions(model, loader, device, name):
     actual_coords = np.array(actual_coords)
     pred_coords = np.array(pred_coords)
     
+    # Calculate distances between predicted and actual coordinates
+    distances = np.sqrt(np.sum((pred_coords - actual_coords)**2, axis=1))
+    
+    # Normalize distances for color mapping (0 to 1 range)
+    max_dist = np.max(distances)
+    if max_dist > 0:
+        norm_distances = distances / max_dist
+    else:
+        norm_distances = distances
+    
+    # Create color map (red to green)
+    colors = []
+    for d in norm_distances:
+        # Convert distance to RGB: green (0,1,0) for good predictions, red (1,0,0) for bad ones
+        r = min(1.0, d * 2)        # More red as distance increases
+        g = min(1.0, 2 - d * 2)    # Less green as distance increases
+        b = 0.0                    # No blue component
+        colors.append([r, g, b])
+    
     # Plot the results
     plt.figure(figsize=(10, 10))
-    plt.scatter(actual_coords[:, 0], actual_coords[:, 1], c='blue', alpha=0.5, label='Actual')
-    plt.scatter(pred_coords[:, 0], pred_coords[:, 1], c='red', alpha=0.5, label='Predicted')
+    
+    # Plot actual coordinates with very low opacity
+    plt.scatter(actual_coords[:, 0], actual_coords[:, 1], c='blue', alpha=0.2, label='Actual')
+    
+    # Plot predicted coordinates with color based on distance
+    plt.scatter(pred_coords[:, 0], pred_coords[:, 1], c=colors, alpha=0.7, label='Predicted')
     
     # Add reference lines for x=y
     plt.axhline(y=0.5, color='gray', linestyle='--', alpha=0.3)
@@ -191,12 +228,77 @@ def visualize_predictions(model, loader, device, name):
     plt.xlim(0, 1)
     plt.ylim(0, 1)
     
+    # Create custom legend elements for color gradient
+    from matplotlib.lines import Line2D
+    import matplotlib.colors as mcolors
+    
+    legend_elements = [
+        Line2D([0], [0], marker='o', color='w', markerfacecolor='green', markersize=10, label='Good prediction'),
+        Line2D([0], [0], marker='o', color='w', markerfacecolor='orange', markersize=10, label='Average prediction'),
+        Line2D([0], [0], marker='o', color='w', markerfacecolor='red', markersize=10, label='Poor prediction'),
+        Line2D([0], [0], marker='o', color='w', markerfacecolor='blue', alpha=0.2, markersize=10, label='Actual position')
+    ]
+    
     plt.title('Gaze Estimation Results: Actual vs Predicted Coordinates')
     plt.xlabel('X Coordinate')
     plt.ylabel('Y Coordinate')
-    plt.legend()
+    plt.legend(handles=legend_elements)
     plt.grid(alpha=0.3)
+    
+    # Add text showing average distance
+    avg_distance = np.mean(distances)
+    plt.text(0.05, 0.95, f'Average Error: {avg_distance:.4f}', transform=plt.gca().transAxes, 
+             fontsize=10, verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+    
     plt.savefig(f'prediction_visualization_{name}.png')
+    print(f"Visualization saved as prediction_visualization_{name}.png")
+
+def get_proper_train_val_split():
+    """
+    Create train/val split based on original images to prevent data leakage
+    
+    Returns:
+        train_indices, val_indices: Indices for proper train/val split in the augmented dataset
+    """
+    # Load original dataset
+    original_df = pd.read_csv("dataset.csv")
+    
+    # Load augmented dataset
+    augmented_df = pd.read_csv("augmented_dataset.csv")
+    
+    # Get original image filenames (without path)
+    original_filenames = [os.path.basename(img_path).split('.')[0] for img_path in original_df['img_filename']]
+    
+    # Split original filenames into train/val sets
+    np.random.seed(42)  # For reproducibility
+    train_size = int(0.9 * len(original_filenames))
+    indices = np.arange(len(original_filenames))
+    np.random.shuffle(indices)
+    train_indices = indices[:train_size]
+    val_indices = indices[train_size:]
+    
+    train_filenames = [original_filenames[i] for i in train_indices]
+    val_filenames = [original_filenames[i] for i in val_indices]
+    
+    # Find corresponding augmented indices
+    train_aug_indices = []
+    val_aug_indices = []
+    
+    for idx, row in augmented_df.iterrows():
+        # Extract original filename from augmented filename
+        # Example: "Augmented_Dataset/1751743551_1.jpg" -> "1751743551"
+        original_name = os.path.basename(row['img_filename']).split('_')[0]
+        
+        if original_name in train_filenames:
+            train_aug_indices.append(idx)
+        elif original_name in val_filenames:
+            val_aug_indices.append(idx)
+    
+    print(f"Original dataset: {len(original_df)} images")
+    print(f"Train set: {len(train_filenames)} original images, {len(train_aug_indices)} augmented images")
+    print(f"Val set: {len(val_filenames)} original images, {len(val_aug_indices)} augmented images")
+    
+    return train_aug_indices, val_aug_indices
 
 def main():
     # Set device
@@ -215,35 +317,18 @@ def main():
     ])
     
     # Create dataset
-    dataset = EyeTrackerDataset(csv_file="augmented_dataset.csv", transform=transform)
+    full_dataset = EyeTrackerDataset(csv_file="augmented_dataset.csv", transform=transform)
     
     # Check if dataset is not empty
-    if len(dataset) == 0:
+    if len(full_dataset) == 0:
         raise ValueError("Dataset is empty. Please run dataset_generator.py first.")
     
-    # Stratify split based on original image IDs
-    unique_ids = np.unique(dataset.original_ids)
+    # Get proper train/val split indices to prevent data leakage
+    train_indices, val_indices = get_proper_train_val_split()
     
-    # Get indices for each unique original image ID
-    id_to_indices = {}
-    for id_val in unique_ids:
-        id_to_indices[id_val] = np.where(dataset.original_ids == id_val)[0]
-    
-    # Split the unique IDs into train and validation
-    train_ids, val_ids = train_test_split(unique_ids, test_size=0.2, random_state=42)
-    
-    # Collect indices for train and validation
-    train_indices = []
-    for id_val in train_ids:
-        train_indices.extend(id_to_indices[id_val])
-    
-    val_indices = []
-    for id_val in val_ids:
-        val_indices.extend(id_to_indices[id_val])
-    
-    # Create train and validation subsets
-    train_dataset = Subset(dataset, train_indices)
-    val_dataset = Subset(dataset, val_indices)
+    # Create train and validation datasets using the indices
+    train_dataset = Subset(full_dataset, train_indices)
+    val_dataset = Subset(full_dataset, val_indices)
 
     # Print dataset size
     print(f"Train dataset size: {len(train_dataset)}")
@@ -257,12 +342,12 @@ def main():
     model = Model()
     
     # Define loss function and optimizer
-    criterion = nn.MSELoss()
+    criterion = nn.L1Loss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     
     # Train the model with early stopping
-    num_epochs = 25
-    train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, patience=5)
+    num_epochs = 50
+    train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, patience=15)
     
     # Load the best model for visualization
     model = Model()
@@ -274,7 +359,6 @@ def main():
     visualize_predictions(model, val_loader, device, "val")
     
     print("Training and visualization complete!")
-
 
 if __name__ == "__main__":
     main()

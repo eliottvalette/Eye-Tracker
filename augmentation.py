@@ -30,6 +30,7 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 import shutil
+import random
 
 # Ensure TensorFlow is using the right backend
 physical_devices = tf.config.list_physical_devices('GPU')
@@ -62,28 +63,83 @@ def load_and_preprocess_image(image_path):
     return img_tensor
 
 def apply_augmentations(image_tensor):
-    """Apply 8 different augmentations to an image"""
+    """Apply 4 different augmentations to an image"""
     augmented_images = []
-    
+
     # 1. Original image (no augmentation)
     augmented_images.append(image_tensor)
-    
+
     # Helper function for horizontal translation
     def horizontal_translation(img, pixels=20):
         # Create translation matrix
         translated = tf.roll(img, shift=pixels, axis=1)  # Shift horizontally
         return translated
     
+    angles_available = [0, 30, 60, 90, 120, 150, 180]
+    angle_chosen = random.choice(angles_available)
+    def add_random_angle_stripes(img, n_stripes=15, thickness=6, angle=None):
+        """Add stripes at a random angle to the image"""
+        img_np = img.numpy().astype(np.uint8)
+        h, w, c = img_np.shape
+        
+        # Generate random angle in degrees (0-180)
+        if angle is None:
+            angle = random.uniform(0, 180)
+        angle_rad = np.deg2rad(angle)
+        
+        # Calculate perpendicular direction to the stripes
+        dx = np.cos(angle_rad)
+        dy = np.sin(angle_rad)
+        
+        # Calculate max distance along this direction
+        max_dist = abs(w * dx) + abs(h * dy)
+        stripe_distance = max_dist / n_stripes
+        
+        # Create a grid of coordinates
+        y_coords, x_coords = np.mgrid[0:h, 0:w]
+        
+        # Project each point onto the perpendicular direction
+        projected_dist = x_coords * dx + y_coords * dy
+        
+        # Create mask for stripes
+        mask = (projected_dist % stripe_distance) < thickness
+        
+        # Apply darkening to the stripe areas, but skip the middle of the screen
+        h_center = h // 2
+        h_lower_bound = int(h * 0.7)
+        w_center = w // 2
+        center_region = 100  # Size of center region to skip
+        
+        for channel in range(c):
+            # Create a mask that excludes the center region
+            center_mask = np.ones_like(mask, dtype=bool)
+            center_mask[h_center-center_region//2:h_center+center_region//2, 
+                       w_center-center_region//2:w_center+center_region//2] = False
+            center_mask[h_lower_bound:, :] = False
+            
+            # Apply darkening only to stripe areas outside the center region
+            combined_mask = mask & center_mask
+            img_np[:, :, channel][combined_mask] = (img_np[:, :, channel][combined_mask] * 0.5).astype(np.uint8)
+        
+        return tf.convert_to_tensor(img_np, dtype=tf.float32)
+
     # 2. Saturation shift increase + horizontal shift right
-    saturation_increase = tf.image.adjust_saturation(image_tensor, 1.5)
+    saturation_increase = tf.image.adjust_saturation(image_tensor, 2.0)
     saturation_increase_shifted = horizontal_translation(saturation_increase, 20)
+    if random.random() < 0.5:
+        saturation_increase_shifted = add_random_angle_stripes(saturation_increase_shifted, angle=random.choice(angles_available))
+    
     augmented_images.append(saturation_increase_shifted)
 
     # 3. Saturation shift decrease + horizontal shift left
-    saturation_decrease = tf.image.adjust_saturation(image_tensor, 0.5)
+    saturation_decrease = tf.image.adjust_saturation(image_tensor, 0.4)
     saturation_decrease_shifted = horizontal_translation(saturation_decrease, -20)
-    augmented_images.append(saturation_decrease_shifted)    
+    if random.random() < 0.5:
+        saturation_decrease_shifted = add_random_angle_stripes(saturation_decrease_shifted, angle=random.choice(angles_available))
     
+    augmented_images.append(saturation_decrease_shifted)
+
+
     return augmented_images
 
 def save_augmented_image(image_tensor, output_path):

@@ -15,12 +15,23 @@ import matplotlib.pyplot as plt
 from torchvision import transforms
 
 LOAD_MODEL = False
+OVERFIT_FIRST_BATCH = True
 
 class ToTensorRGB(object):
     """Convert numpy image to PyTorch tensor and normalize."""
     def __call__(self, image):
         # Convert from numpy to tensor and normalize
         return torch.from_numpy(image.transpose((2, 0, 1))).float() / 255.0
+
+# New grayscale tensor converter
+class ToTensorGray(object):
+    """Convert numpy RGB image to single-channel grayscale tensor and normalize."""
+    def __call__(self, image):
+        # Convert RGB numpy array to grayscale (H x W)
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        # Add channel dimension and convert to tensor
+        gray = np.expand_dims(gray, axis=2)  # H x W x 1
+        return torch.from_numpy(gray.transpose((2, 0, 1))).float() / 255.0
 
 class EyeTrackerDataset(Dataset):
     def __init__(self, csv_file, transform=None):
@@ -51,37 +62,48 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
     train_losses = []
     val_losses = []
 
-    # Before Launching the real training, we'll overfit on one batch to set up the weights
-    model.train()
-    # Get a single batch for overfitting
-    images, targets = next(iter(train_loader))
-    images = images.to(device)
-    targets = targets.to(device)
-    
-    print("Overfitting on a single batch to set up weights...")
-    # Train for a few iterations on this single batch
-    for i in range(100):  # 100 iterations should be enough to overfit
-        # Zero the gradients
-        optimizer.zero_grad()
+    if OVERFIT_FIRST_BATCH:
+        # Before Launching the real training, we'll overfit on one batch to set up the weights
+        model.train()
+        # Get 8 batches for overfitting
+        train_iter = iter(train_loader)
+        images_list = []
+        targets_list = []
+        for _ in range(2):
+            batch_images, batch_targets = next(train_iter)
+            images_list.append(batch_images)
+            targets_list.append(batch_targets)
         
-        # Forward pass
-        outputs = model(images)
-        loss = criterion(outputs, targets)
+        # Concatenate all batches
+        images = torch.cat(images_list, dim=0)
+        targets = torch.cat(targets_list, dim=0)
+        images = images.to(device)
+        targets = targets.to(device)
         
-        # Backward pass and optimize
-        loss.backward()
-        optimizer.step()
-        
-        # Print progress every 10 iterations
-        if (i + 1) % 10 == 0:
-            print(f"Overfit iteration {i+1}/100, Loss: {loss.item():.6f}")
+        print("Overfitting on a single batch to set up weights...")
+        # Train for a few iterations on this single batch
+        for i in range(200):  # 200 iterations should be enough to overfit
+            # Zero the gradients
+            optimizer.zero_grad()
             
-            # If loss is very low, we can stop early
-            if loss.item() < 0.001:
-                print("Achieved very low loss, stopping overfit phase.")
-                break
-    
-    print("Overfit phase complete. Starting main training loop.")
+            # Forward pass
+            outputs = model(images)
+            loss = criterion(outputs, targets)
+            
+            # Backward pass and optimize
+            loss.backward()
+            optimizer.step()
+            
+            # Print progress every 10 iterations
+            if (i + 1) % 10 == 0:
+                print(f"Overfit iteration {i+1}/100, Loss: {loss.item():.6f}")
+                
+                # If loss is very low, we can stop early
+                if loss.item() < 0.001:
+                    print("Achieved very low loss, stopping overfit phase.")
+                    break
+        
+        print("Overfit phase complete. Starting main training loop.")
     
     # Early stopping variables
     counter = 0
@@ -272,7 +294,6 @@ def get_proper_train_val_split():
     original_filenames = [os.path.basename(img_path).split('.')[0] for img_path in original_df['img_filename']]
     
     # Split original filenames into train/val sets
-    np.random.seed(42)  # For reproducibility
     train_size = int(0.9 * len(original_filenames))
     indices = np.arange(len(original_filenames))
     np.random.shuffle(indices)
@@ -312,10 +333,10 @@ def main():
     if torch.cuda.is_available():
         torch.cuda.manual_seed(42)
     
-    # Define transforms - use a proper class instead of lambda
+    # Define transforms for grayscale images
     transform = transforms.Compose([
-        ToTensorRGB(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ToTensorGray(),
+        transforms.Normalize(mean=[0.5], std=[0.5])
     ])
     
     # Create dataset
@@ -337,21 +358,25 @@ def main():
     print(f"Validation dataset size: {len(val_dataset)}")
     
     # Create data loaders - set num_workers=0 to avoid multiprocessing issues
-    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=0)
-    val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False, num_workers=0)
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=0)
+    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=0)
     
     # Initialize model
     model = Model()
     if LOAD_MODEL:
+        print("Loading best model...")
         model.load_model("best_model.pth")
     
     # Define loss function and optimizer
     criterion = nn.L1Loss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     
-    # Train the model with early stopping
-    num_epochs = 50
-    train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, patience=15)
+    try:
+        # Train the model with early stopping
+        num_epochs = 50
+        train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, patience=15)
+    except KeyboardInterrupt:
+        print("\nTraining interrupted by user. Loading best model for visualization...")
     
     # Load the best model for visualization
     model = Model()

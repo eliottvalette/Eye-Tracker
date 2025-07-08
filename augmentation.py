@@ -124,20 +124,22 @@ def apply_augmentations(image_tensor):
         return tf.convert_to_tensor(img_np, dtype=tf.float32)
 
     # 2. Saturation shift increase + horizontal shift right
-    saturation_increase = tf.image.adjust_saturation(image_tensor, 2.0)
-    saturation_increase_shifted = horizontal_translation(saturation_increase, 20)
     if random.random() < 0.5:
-        saturation_increase_shifted = add_random_angle_stripes(saturation_increase_shifted, angle=random.choice(angles_available))
-    
-    augmented_images.append(saturation_increase_shifted)
+        saturation_increase = tf.image.adjust_saturation(image_tensor, 2.0)
+        saturation_increase_shifted = horizontal_translation(saturation_increase, 20)
+        if random.random() < 0.2:
+            saturation_increase_shifted = add_random_angle_stripes(saturation_increase_shifted, angle=random.choice(angles_available))
+        
+        augmented_images.append(saturation_increase_shifted)
 
-    # 3. Saturation shift decrease + horizontal shift left
-    saturation_decrease = tf.image.adjust_saturation(image_tensor, 0.4)
-    saturation_decrease_shifted = horizontal_translation(saturation_decrease, -20)
     if random.random() < 0.5:
-        saturation_decrease_shifted = add_random_angle_stripes(saturation_decrease_shifted, angle=random.choice(angles_available))
-    
-    augmented_images.append(saturation_decrease_shifted)
+        # 3. Saturation shift decrease + horizontal shift left
+        saturation_decrease = tf.image.adjust_saturation(image_tensor, 0.4)
+        saturation_decrease_shifted = horizontal_translation(saturation_decrease, -20)
+        if random.random() < 0.2:
+            saturation_decrease_shifted = add_random_angle_stripes(saturation_decrease_shifted, angle=random.choice(angles_available))
+        
+        augmented_images.append(saturation_decrease_shifted)
 
 
     return augmented_images

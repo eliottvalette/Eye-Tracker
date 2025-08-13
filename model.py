@@ -5,7 +5,7 @@ class Model(nn.Module):
     def __init__(self):
         super().__init__()
         self.pass_1 = nn.Sequential( 
-            nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1), # 224x224x1 -> 224x224x16
+            nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1), # 224x224x3 -> 224x224x16
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2), # 224x224x16 -> 112x112x16
             nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1), # 112x112x16 -> 112x112x32
@@ -28,10 +28,10 @@ class Model(nn.Module):
             nn.Dropout(0.05),
             nn.Linear(128 * 14, 512),
             nn.ReLU(),
-            nn.Dropout(0.03),
+            nn.Dropout(0.05),
             nn.Linear(512, 128),
             nn.ReLU(),
-            nn.Dropout(0.01),
+            nn.Dropout(0.02),
             nn.Linear(128, 2)  # Output x, y coordinates
         )
     

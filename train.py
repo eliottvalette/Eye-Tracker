@@ -16,6 +16,10 @@ from torchvision import transforms
 
 LOAD_MODEL = False
 OVERFIT_FIRST_BATCH = True
+OVERFIT_ITERATIONS = 100
+VIZ_DIR = "viz"
+
+os.makedirs(VIZ_DIR, exist_ok=True)
 
 class ToTensorRGB(object):
     """Convert numpy image to PyTorch tensor and normalize."""
@@ -82,7 +86,7 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
         
         print("Overfitting on a single batch to set up weights...")
         # Train for a few iterations on this single batch
-        for i in range(200):  # 200 iterations should be enough to overfit
+        for i in range(OVERFIT_ITERATIONS):  # 200 iterations should be enough to overfit
             # Zero the gradients
             optimizer.zero_grad()
             
@@ -96,7 +100,7 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
             
             # Print progress every 10 iterations
             if (i + 1) % 10 == 0:
-                print(f"Overfit iteration {i+1}/100, Loss: {loss.item():.6f}")
+                print(f"Overfit iteration {i+1}/{OVERFIT_ITERATIONS}, Loss: {loss.item():.6f}")
                 
                 # If loss is very low, we can stop early
                 if loss.item() < 0.001:
@@ -114,6 +118,7 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
         running_loss = 0.0
         
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}")
+        batch_count = 0
         for images, targets in progress_bar:
             images = images.to(device)
             targets = targets.to(device)
@@ -130,7 +135,11 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
             optimizer.step()
             
             running_loss += loss.item() * images.size(0)
-            progress_bar.set_postfix({'loss': loss.item()})
+            batch_count += 1
+            
+            # Calculate mean loss so far in this epoch
+            mean_loss = running_loss / (batch_count * images.size(0))
+            progress_bar.set_postfix({'mean_loss': mean_loss})
         
         epoch_train_loss = running_loss / len(train_loader.dataset)
         train_losses.append(epoch_train_loss)
@@ -140,6 +149,7 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
         running_val_loss = 0.0
         
         val_progress_bar = tqdm(val_loader, desc="Validation")
+        val_batch_count = 0
         with torch.no_grad():
             for images, targets in val_progress_bar:
                 images = images.to(device)
@@ -149,7 +159,11 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
                 val_loss = criterion(outputs, targets)
                 
                 running_val_loss += val_loss.item() * images.size(0)
-                val_progress_bar.set_postfix({'val_loss': val_loss.item()})
+                val_batch_count += 1
+                
+                # Calculate mean validation loss so far
+                mean_val_loss = running_val_loss / (val_batch_count * images.size(0))
+                val_progress_bar.set_postfix({'mean_val_loss': mean_val_loss})
         
         epoch_val_loss = running_val_loss / len(val_loader.dataset)
         val_losses.append(epoch_val_loss)
@@ -177,7 +191,7 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.legend()
-    plt.savefig('loss_plot.png')
+    plt.savefig(os.path.join(VIZ_DIR, 'loss_plot.png'))
     
     return train_losses, val_losses
 
@@ -269,12 +283,13 @@ def visualize_predictions(model, loader, device, name):
     plt.legend(handles=legend_elements)
     plt.grid(alpha=0.3)
     
-    # Add text showing average distance
+    # Add text showing average distance at the top right
     avg_distance = np.mean(distances)
-    plt.text(0.05, 0.95, f'Average Error: {avg_distance:.4f}', transform=plt.gca().transAxes, 
-             fontsize=10, verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+    plt.text(0.95, 0.95, f'Average Error: {avg_distance:.4f}', transform=plt.gca().transAxes, 
+             fontsize=10, verticalalignment='top', horizontalalignment='right',
+             bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
     
-    plt.savefig(f'prediction_visualization_{name}.png')
+    plt.savefig(os.path.join(VIZ_DIR, f'prediction_visualization_{name}.png'))
     print(f"Visualization saved as prediction_visualization_{name}.png")
 
 def get_proper_train_val_split():
@@ -333,10 +348,10 @@ def main():
     if torch.cuda.is_available():
         torch.cuda.manual_seed(42)
     
-    # Define transforms for grayscale images
+    # Define transforms for RGB images
     transform = transforms.Compose([
-        ToTensorGray(),
-        transforms.Normalize(mean=[0.5], std=[0.5])
+        ToTensorRGB(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     
     # Create dataset
@@ -367,9 +382,9 @@ def main():
         print("Loading best model...")
         model.load_model("best_model.pth")
     
-    # Define loss function and optimizer
+    # Define loss function and optimizer with weight decay for regularization
     criterion = nn.L1Loss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
     
     try:
         # Train the model with early stopping
@@ -377,6 +392,19 @@ def main():
         train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, patience=15)
     except KeyboardInterrupt:
         print("\nTraining interrupted by user. Loading best model for visualization...")
+        
+        # Plot losses even if interrupted
+        if 'train_losses' in locals() and 'val_losses' in locals():
+            plt.figure(figsize=(10, 5))
+            plt.plot(range(1, len(train_losses)+1), train_losses, 'b-', label='Training Loss')
+            plt.plot(range(1, len(val_losses)+1), val_losses, 'r-', label='Validation Loss')
+            plt.title('Training and Validation Loss (Interrupted)')
+            plt.xlabel('Epochs')
+            plt.ylabel('Loss')
+            plt.legend()
+            plt.savefig(os.path.join(VIZ_DIR, 'loss_plot_interrupted.png'))
+            plt.close()
+            print("Loss plot saved as loss_plot_interrupted.png")
     
     # Load the best model for visualization
     model = Model()

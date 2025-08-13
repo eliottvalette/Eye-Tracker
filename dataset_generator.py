@@ -59,8 +59,15 @@ class DatasetGenerator:
             pygame.draw.rect(self.screen, (255, 255, 255), progress_bar)
             pygame.draw.rect(self.screen, (0, 255, 0), (0, self.height - 50, self.width * (time.time() - start_time) / TIME, 20))
 
-            # Draw a circle on the screen
-            pygame.draw.circle(self.screen, (255, 0, 0), (x, y), 20)
+            # Calculate gradient color from green to red based on time remaining
+            # time_remaining_before_photo: 1.0 -> green, 0.0 -> red
+            t = (max(0.1, time_remaining_before_photo) - 0.1) / 0.9
+            red = int(255 * (1 - t))
+            green = int(255 * t)
+            circle_color = (red, green, 0)
+
+            # Draw a circle on the screen with the gradient color
+            pygame.draw.circle(self.screen, circle_color, (x, y), 20)
             
             pygame.display.flip()
 
@@ -74,7 +81,6 @@ class DatasetGenerator:
         
         # Release webcam when done
         self.release_webcam()
-        
 
     def webcam_photo(self, x, y):
         # Generate unique image filename with timestamp and sample index

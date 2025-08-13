@@ -33,12 +33,11 @@ class LiveTester:
         self.model.to(self.device)
         self.model.eval()
         
-        # Define transform for grayscale input (consistent with training)
+        # Define transform for RGB input (consistent with training)
         self.transform = transforms.Compose([
             transforms.ToPILImage(),
-            transforms.Grayscale(num_output_channels=1),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5], std=[0.5])
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
         
         # For displaying webcam feed

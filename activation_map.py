@@ -14,6 +14,9 @@ import pygame
 from PIL import Image
 import os
 
+VIZ_DIR = "viz"
+os.makedirs(VIZ_DIR, exist_ok=True)
+
 class GradCAM:
     def __init__(self, model, target_layer):
         """
@@ -107,12 +110,11 @@ class ActivationMapVisualizer:
         self.model.to(self.device)
         self.model.eval()
         
-        # Define transform for grayscale input (consistent with training)
+        # Define transform for RGB input (consistent with training)
         self.transform = transforms.Compose([
             transforms.ToPILImage(),
-            transforms.Grayscale(num_output_channels=1),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.5], std=[0.5])
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
         
         # Initialize Grad-CAM with the target layer (last convolutional layer)
@@ -193,7 +195,7 @@ class ActivationMapVisualizer:
                             plt.title('Activation Map')
                             plt.colorbar()
                             plt.tight_layout()
-                            plt.savefig('activation_map.png')
+                            plt.savefig(os.path.join(VIZ_DIR, 'activation_map.png'))
                             plt.close()
                             print("Saved activation map to activation_map.png")
             
@@ -262,11 +264,10 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
     # Initialize Grad-CAM
     grad_cam = GradCAM(model, model.pass_2[0])
     
-    # Define transform for grayscale input
+    # Define transform for RGB input
     transform = transforms.Compose([
-        transforms.Grayscale(num_output_channels=1),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.5], std=[0.5])
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     
     # Get list of image files
@@ -281,7 +282,11 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
     import random
     selected_files = random.sample(image_files, min(num_samples, len(image_files)))
     
-    plt.figure(figsize=(15, 5 * num_samples))
+    # Load augmented dataset to get true coordinates
+    import pandas as pd
+    augmented_df = pd.read_csv("augmented_dataset.csv")
+    
+    plt.figure(figsize=(20, 5 * num_samples))
     
     for i, img_path in enumerate(selected_files):
         # Load image
@@ -309,25 +314,53 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
         with torch.no_grad():
             predictions = model(img_tensor)
         
-        x = predictions[0, 0].item()
-        y = predictions[0, 1].item()
+        pred_x = predictions[0, 0].item()
+        pred_y = predictions[0, 1].item()
         
-        # Plot
-        plt.subplot(num_samples, 3, i*3 + 1)
+        # Get true coordinates from dataset
+        img_filename = os.path.basename(img_path)
+        matching_rows = augmented_df[augmented_df['img_filename'].str.contains(img_filename)]
+        if len(matching_rows) > 0:
+            true_x = matching_rows.iloc[0]['x']
+            true_y = matching_rows.iloc[0]['y']
+        else:
+            true_x, true_y = 0.5, 0.5  # fallback
+        
+        # Plot original image
+        plt.subplot(num_samples, 4, i*4 + 1)
         plt.imshow(img_array)
         plt.title(f"Original - Sample {i+1}")
+        plt.axis('off')
         
-        plt.subplot(num_samples, 3, i*3 + 2)
+        # Plot activation map
+        plt.subplot(num_samples, 4, i*4 + 2)
         plt.imshow(cam, cmap='jet')
         plt.title(f"Activation Map - Sample {i+1}")
         plt.colorbar()
+        plt.axis('off')
         
-        plt.subplot(num_samples, 3, i*3 + 3)
+        # Plot overlay
+        plt.subplot(num_samples, 4, i*4 + 3)
         plt.imshow(superimposed)
-        plt.title(f"Overlay - Pred: ({x:.2f}, {y:.2f})")
+        plt.title(f"Overlay - Pred: ({pred_x:.2f}, {pred_y:.2f})")
+        plt.axis('off')
+        
+        # Plot 2D comparison: true vs predicted coordinates
+        plt.subplot(num_samples, 4, i*4 + 4)
+        plt.scatter(true_x, true_y, c='black', s=100, marker='o', label='True', edgecolors='white', linewidth=2)
+        plt.scatter(pred_x, pred_y, c='red', s=100, marker='x', label='Predicted', linewidth=3)
+        plt.xlim(0, 1)
+        plt.ylim(0, 1)
+        plt.gca().invert_yaxis()  # Invert y-axis to match image coordinates
+        plt.gca().invert_xaxis()  # Invert x-axis to mirror the coordinates
+        plt.title(f"True vs Pred\nError: {np.sqrt((pred_x-true_x)**2 + (pred_y-true_y)**2):.3f}")
+        plt.xlabel('X coordinate')
+        plt.ylabel('Y coordinate')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig('dataset_activation_maps.png')
+    plt.savefig(os.path.join(VIZ_DIR, 'dataset_activation_maps.png'))
     plt.close()
     print("Saved activation maps to dataset_activation_maps.png")
     

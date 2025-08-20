@@ -68,15 +68,8 @@ def apply_augmentations(image_tensor):
 
     # 1. Original image (no augmentation)
     augmented_images.append(image_tensor)
-
-    # Helper function for horizontal translation
-    def horizontal_translation(img, pixels=20):
-        # Create translation matrix
-        translated = tf.roll(img, shift=pixels, axis=1)  # Shift horizontally
-        return translated
     
     angles_available = [0, 30, 60, 90, 120, 150, 180]
-    angle_chosen = random.choice(angles_available)
     def add_random_angle_stripes(img, n_stripes=15, thickness=6, angle=None):
         """Add stripes at a random angle to the image"""
         img_np = img.numpy().astype(np.uint8)
@@ -126,20 +119,18 @@ def apply_augmentations(image_tensor):
     # 2. Saturation shift increase + horizontal shift right
     if random.random() < 0.5:
         saturation_increase = tf.image.adjust_saturation(image_tensor, 2.0)
-        saturation_increase_shifted = horizontal_translation(saturation_increase, 20)
         if random.random() < 0.2:
-            saturation_increase_shifted = add_random_angle_stripes(saturation_increase_shifted, angle=random.choice(angles_available))
+            saturation_increase = add_random_angle_stripes(saturation_increase, angle=random.choice(angles_available))
         
-        augmented_images.append(saturation_increase_shifted)
+        augmented_images.append(saturation_increase)
 
     if random.random() < 0.5:
         # 3. Saturation shift decrease + horizontal shift left
         saturation_decrease = tf.image.adjust_saturation(image_tensor, 0.4)
-        saturation_decrease_shifted = horizontal_translation(saturation_decrease, -20)
         if random.random() < 0.2:
-            saturation_decrease_shifted = add_random_angle_stripes(saturation_decrease_shifted, angle=random.choice(angles_available))
+            saturation_decrease = add_random_angle_stripes(saturation_decrease, angle=random.choice(angles_available))
         
-        augmented_images.append(saturation_decrease_shifted)
+        augmented_images.append(saturation_decrease)
 
 
     return augmented_images

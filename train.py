@@ -60,7 +60,7 @@ class EyeTrackerDataset(Dataset):
         
         return image, coordinates
 
-def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, save_path="best_model.pth", patience=5):
+def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, save_path, patience):
     model.to(device)
     best_val_loss = float('inf')
     train_losses = []
@@ -107,7 +107,7 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
                     print("Achieved very low loss, stopping overfit phase.")
                     break
         
-        print("Overfit phase complete. Starting main training loop.")
+        print("\nOverfit phase complete. Starting main training loop.")
     
     # Early stopping variables
     counter = 0
@@ -182,6 +182,11 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
             if counter >= patience:
                 print(f"Early stopping triggered after {epoch+1} epochs")
                 break
+
+        if epoch == 24 :
+            patience /= 3
+        
+        print()
     
     # Plot losses
     plt.figure(figsize=(10, 5))
@@ -344,9 +349,9 @@ def main():
     print(f"Using device: {device}")
     
     # Set random seed for reproducibility
-    torch.manual_seed(42)
+    torch.manual_seed(43)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed(42)
+        torch.cuda.manual_seed(43)
     
     # Define transforms for RGB images
     transform = transforms.Compose([
@@ -389,7 +394,7 @@ def main():
     try:
         # Train the model with early stopping
         num_epochs = 50
-        train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, patience=15)
+        train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, save_path="best_model.pth", patience=15)
     except KeyboardInterrupt:
         print("\nTraining interrupted by user. Loading best model for visualization...")
         

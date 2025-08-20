@@ -167,11 +167,15 @@ class ActivationMapVisualizer:
         with torch.no_grad():
             predictions = self.model(image_tensor)
         
-        # Get x, y coordinates (denormalize)
-        x = predictions[0, 0].item() * self.width
-        y = predictions[0, 1].item() * self.height
+        # Get x, y coordinates (keep normalized for consistency with training)
+        x = predictions[0, 0].item()
+        y = predictions[0, 1].item()
         
-        return x, y, superimposed, cam
+        # Convert to screen coordinates for display
+        screen_x = x * self.width
+        screen_y = y * self.height
+        
+        return screen_x, screen_y, superimposed, cam, x, y
     
     def run(self):
         running = True
@@ -207,7 +211,7 @@ class ActivationMapVisualizer:
             
             if model_input is not None and display_frame is not None:
                 # Make prediction with activation map
-                pred_x, pred_y, superimposed, cam = self.predict_with_activation_map(model_input)
+                pred_x, pred_y, superimposed, cam, norm_x, norm_y = self.predict_with_activation_map(model_input)
                 
                 # Save for potential saving
                 self.last_cam = cam
@@ -233,14 +237,16 @@ class ActivationMapVisualizer:
                 # Draw a line from the center to the predicted position
                 pygame.draw.line(self.screen, (255, 0, 0), (self.width//2, self.height//2), (int(pred_x), int(pred_y)), 2)
                 
-                # Display prediction coordinates
+                # Display both normalized and screen coordinates for clarity
                 font = pygame.font.Font(None, 36)
-                text = font.render(f"Predicted: ({pred_x:.1f}, {pred_y:.1f})", True, (255, 255, 255))
-                self.screen.blit(text, (20, 430))
+                text1 = font.render(f"Screen: ({pred_x:.1f}, {pred_y:.1f})", True, (255, 255, 255))
+                text2 = font.render(f"Normalized: ({norm_x:.3f}, {norm_y:.3f})", True, (255, 255, 255))
+                self.screen.blit(text1, (20, 430))
+                self.screen.blit(text2, (20, 470))
                 
                 # Display instructions
                 instructions = font.render("Press 'S' to save activation map, ESC to exit", True, (255, 255, 255))
-                self.screen.blit(instructions, (20, 480))
+                self.screen.blit(instructions, (20, 520))
             
             pygame.display.flip()
             self.clock.tick(30)  # 30 fps
@@ -284,7 +290,7 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
     
     # Load augmented dataset to get true coordinates
     import pandas as pd
-    augmented_df = pd.read_csv("augmented_dataset.csv")
+    dataset_df = pd.read_csv("dataset.csv")
     
     plt.figure(figsize=(20, 5 * num_samples))
     
@@ -319,7 +325,7 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
         
         # Get true coordinates from dataset
         img_filename = os.path.basename(img_path)
-        matching_rows = augmented_df[augmented_df['img_filename'].str.contains(img_filename)]
+        matching_rows = dataset_df[dataset_df['img_filename'].str.contains(img_filename)]
         if len(matching_rows) > 0:
             true_x = matching_rows.iloc[0]['x']
             true_y = matching_rows.iloc[0]['y']
@@ -351,11 +357,10 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
         plt.scatter(pred_x, pred_y, c='red', s=100, marker='x', label='Predicted', linewidth=3)
         plt.xlim(0, 1)
         plt.ylim(0, 1)
-        plt.gca().invert_yaxis()  # Invert y-axis to match image coordinates
-        plt.gca().invert_xaxis()  # Invert x-axis to mirror the coordinates
+        # Remove inconsistent axis inversions for coordinate consistency
         plt.title(f"True vs Pred\nError: {np.sqrt((pred_x-true_x)**2 + (pred_y-true_y)**2):.3f}")
-        plt.xlabel('X coordinate')
-        plt.ylabel('Y coordinate')
+        plt.xlabel('X coordinate (normalized)')
+        plt.ylabel('Y coordinate (normalized)')
         plt.legend()
         plt.grid(True, alpha=0.3)
     
@@ -369,7 +374,7 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
 
 if __name__ == "__main__":
     # Run live activation map visualization
-    analyze_dataset_samples("Augmented_Dataset", num_samples=20) 
+    analyze_dataset_samples("Dataset", num_samples=20) 
 
     visualizer = ActivationMapVisualizer()
     visualizer.run()

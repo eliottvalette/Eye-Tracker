@@ -12,14 +12,12 @@ The csv file contains the following columns:
 - y: the y coordinate of the target
 """
 import pygame
-import numpy as np
 import random as rd
 import os
 import pandas as pd
 import cv2
 import time
 import threading
-import math
 
 TIME = 120
 CAPTURE_INTERVAL = 0.1  # Capture every 100ms
@@ -43,17 +41,13 @@ class DatasetGenerator:
         # Circle movement properties
         self.circle_x = width // 2
         self.circle_y = height // 2
-        self.circle_vx = rd.uniform(100, 200) * rd.choice([-1, 1])  # Random velocity
-        self.circle_vy = rd.uniform(100, 200) * rd.choice([-1, 1])
-        
-        # Advanced movement properties
-        self.time_start = time.time()
-        self.base_speed = rd.uniform(80, 150)
-        self.curve_amplitude = rd.uniform(50, 100)
-        self.velocity_change_interval = rd.uniform(2.0, 4.0)  # Change velocity every 2-4 seconds
-        self.last_velocity_change = time.time()
-        self.movement_pattern = rd.choice(['bounce', 'curve', 'spiral', 'random_walk'])
-        
+        self.circle_vx = rd.choice([-1, 1]) * rd.uniform(3, 4)
+        self.circle_vy = rd.choice([-1, 1]) * rd.uniform(3, 4)
+
+        # Curve direction
+        self.curve_x = rd.uniform(0.9, 1.1)
+        self.curve_y = rd.uniform(0.9, 1.1)
+
         # Threading for continuous capture
         self.capture_running = False
         self.capture_thread = None
@@ -107,139 +101,15 @@ class DatasetGenerator:
 
     def update_circle_position_advanced(self):
         """Update circle position with advanced movement patterns"""
-        current_time = time.time()
-        elapsed_time = current_time - self.time_start
+        self.circle_x += self.circle_vx * self.curve_x
+        self.circle_y += self.circle_vy * self.curve_y
         
-        # Change velocity periodically
-        if current_time - self.last_velocity_change > self.velocity_change_interval:
-            self.change_velocity()
-            self.last_velocity_change = current_time
-        
-        # Apply different movement patterns
-        if self.movement_pattern == 'bounce':
-            self.update_circle_position_bounce()
-        elif self.movement_pattern == 'curve':
-            self.update_circle_position_curve(elapsed_time)
-        elif self.movement_pattern == 'spiral':
-            self.update_circle_position_spiral(elapsed_time)
-        elif self.movement_pattern == 'random_walk':
-            self.update_circle_position_random_walk(elapsed_time)
-        
-        # Keep circle within bounds
-        self.circle_x = max(20, min(self.width - 20, self.circle_x))
-        self.circle_y = max(20, min(self.height - 20, self.circle_y))
-
-    def update_circle_position_bounce(self):
-        """Update circle position with bouncing off walls"""
-        dt = 1/60  # Assuming 60 FPS
-        self.circle_x += self.circle_vx * dt
-        self.circle_y += self.circle_vy * dt
-        
-        # Bounce off walls
+        # Check if circle is hitting the edges
         if self.circle_x <= 20 or self.circle_x >= self.width - 20:
-            self.circle_vx = -self.circle_vx
-            self.circle_x = max(20, min(self.width - 20, self.circle_x))
-            
+            self.circle_vx *= -1
+        
         if self.circle_y <= 20 or self.circle_y >= self.height - 20:
-            self.circle_vy = -self.circle_vy
-            self.circle_y = max(20, min(self.height - 20, self.circle_y))
-
-    def update_circle_position_curve(self, elapsed_time):
-        """Update circle position with curved movement using sin and cos"""
-        dt = 1/60
-        
-        # Base movement with stronger velocity
-        self.circle_x += self.circle_vx * dt
-        self.circle_y += self.circle_vy * dt
-        
-        # Add curved motion with reduced amplitude to avoid convergence
-        curve_x = rd.uniform(-self.curve_amplitude, self.curve_amplitude)
-        curve_y = rd.uniform(-self.curve_amplitude, self.curve_amplitude)
-        
-        self.circle_x += curve_x * dt
-        self.circle_y += curve_y * dt
-        
-        # Bounce off walls
-        if self.circle_x <= 20 or self.circle_x >= self.width - 20:
-            self.circle_vx = -self.circle_vx
-            self.circle_x = max(20, min(self.width - 20, self.circle_x))
-            
-        if self.circle_y <= 20 or self.circle_y >= self.height - 20:
-            self.circle_vy = -self.circle_vy
-            self.circle_y = max(20, min(self.height - 20, self.circle_y))
-
-    def update_circle_position_spiral(self, elapsed_time):
-        """Update circle position with spiral movement"""
-        dt = 1/60
-        
-        # Spiral center - use current position as base to avoid convergence
-        base_x = self.circle_x
-        base_y = self.circle_y
-        
-        # Spiral parameters with larger radius and faster movement
-        spiral_radius = 100 + 80 * math.sin(elapsed_time * 0.3)
-        spiral_angle = elapsed_time * 3
-        
-        # Calculate spiral offset from current position
-        spiral_offset_x = spiral_radius * math.cos(spiral_angle)
-        spiral_offset_y = spiral_radius * math.sin(spiral_angle)
-        
-        # Add spiral motion to current position
-        self.circle_x += spiral_offset_x * dt * 0.5
-        self.circle_y += spiral_offset_y * dt * 0.5
-        
-        # Add some random drift to prevent staying in one area
-        drift_x = 20 * math.sin(elapsed_time * 1.7) * math.cos(elapsed_time * 0.9)
-        drift_y = 20 * math.cos(elapsed_time * 1.3) * math.sin(elapsed_time * 1.1)
-        
-        self.circle_x += drift_x * dt
-        self.circle_y += drift_y * dt
-
-    def update_circle_position_random_walk(self, elapsed_time):
-        """Update circle position with random walk movement"""
-        dt = 1/60
-        
-        # Random walk step size
-        step_size = 3.0
-        
-        # Add random movement in both directions
-        random_x = rd.uniform(-step_size, step_size)
-        random_y = rd.uniform(-step_size, step_size)
-        
-        self.circle_x += random_x
-        self.circle_y += random_y
-        
-        # Add some momentum to make movement more natural
-        momentum_x = rd.uniform(-1.0, 1.0) * step_size * 0.5
-        momentum_y = rd.uniform(-1.0, 1.0) * step_size * 0.5
-        
-        self.circle_x += momentum_x
-        self.circle_y += momentum_y
-        
-        # Bounce off walls
-        if self.circle_x <= 20 or self.circle_x >= self.width - 20:
-            self.circle_x = max(20, min(self.width - 20, self.circle_x))
-            
-        if self.circle_y <= 20 or self.circle_y >= self.height - 20:
-            self.circle_y = max(20, min(self.height - 20, self.circle_y))
-
-    def change_velocity(self):
-        """Change velocity randomly"""
-        # Random velocity change
-        self.circle_vx = rd.uniform(80, 200) * rd.choice([-1, 1])
-        self.circle_vy = rd.uniform(80, 200) * rd.choice([-1, 1])
-        
-        # Randomly change movement pattern
-        if rd.random() < 0.3:  # 30% chance to change pattern
-            self.movement_pattern = rd.choice(['bounce', 'curve', 'spiral', 'random_walk'])
-            self.curve_amplitude = rd.uniform(50, 100)
-        
-        # Update velocity change interval
-        self.velocity_change_interval = rd.uniform(2.0, 4.0)
-
-    def update_circle_position(self):
-        """Legacy method - kept for compatibility"""
-        self.update_circle_position_bounce()
+            self.circle_vy *= -1
 
     def continuous_capture(self):
         """Continuously capture images in a separate thread"""

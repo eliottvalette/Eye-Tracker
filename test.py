@@ -75,13 +75,17 @@ class LiveTester:
         with torch.no_grad():
             predictions = self.model(image_tensor)
         
-        print(f"Predicted x: {predictions[0, 0].item()}, y: {predictions[0, 1].item()}")
+        # Get normalized coordinates (0-1) for consistency with training
+        norm_x = predictions[0, 0].item()
+        norm_y = predictions[0, 1].item()
         
-        # Get x, y coordinates (denormalize)
-        x = predictions[0, 0].item() * self.width
-        y = predictions[0, 1].item() * self.height
+        print(f"Predicted normalized: x={norm_x:.3f}, y={norm_y:.3f}")
         
-        return x, y
+        # Get x, y coordinates (denormalize for screen display)
+        x = norm_x * self.width
+        y = norm_y * self.height
+        
+        return x, y, norm_x, norm_y
     
     def run(self):
         running = True
@@ -102,7 +106,7 @@ class LiveTester:
             
             if model_input is not None and display_frame is not None:
                 # Make prediction
-                pred_x, pred_y = self.predict_gaze(model_input)
+                pred_x, pred_y, norm_x, norm_y = self.predict_gaze(model_input)
                 
                 # Convert numpy array to pygame surface for display
                 webcam_surface = pygame.surfarray.make_surface(display_frame.swapaxes(0, 1))
@@ -118,8 +122,10 @@ class LiveTester:
                 
                 # Display prediction coordinates
                 font = pygame.font.Font(None, 36)
-                text = font.render(f"Predicted: ({pred_x:.1f}, {pred_y:.1f})", True, (255, 255, 255))
-                self.screen.blit(text, (20, 430))
+                text1 = font.render(f"Screen: ({pred_x:.1f}, {pred_y:.1f})", True, (255, 255, 255))
+                text2 = font.render(f"Normalized: ({norm_x:.3f}, {norm_y:.3f})", True, (255, 255, 255))
+                self.screen.blit(text1, (20, 430))
+                self.screen.blit(text2, (20, 470))
             
             pygame.display.flip()
             self.clock.tick(30)  # 30 fps

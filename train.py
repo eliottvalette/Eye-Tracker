@@ -5,7 +5,9 @@ import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader, random_split, Subset
+from torch.utils.data import Dataset, DataLoader, random_split
+from sklearn.model_selection import train_test_split
+
 import pandas as pd
 import cv2
 import numpy as np
@@ -297,52 +299,6 @@ def visualize_predictions(model, loader, device, name):
     plt.savefig(os.path.join(VIZ_DIR, f'prediction_visualization_{name}.png'))
     print(f"Visualization saved as prediction_visualization_{name}.png")
 
-def get_proper_train_val_split():
-    """
-    Create train/val split based on original images to prevent data leakage
-    
-    Returns:
-        train_indices, val_indices: Indices for proper train/val split in the augmented dataset
-    """
-    # Load original dataset
-    original_df = pd.read_csv("dataset.csv")
-    
-    # Load augmented dataset
-    augmented_df = pd.read_csv("augmented_dataset.csv")
-    
-    # Get original image filenames (without path)
-    original_filenames = [os.path.basename(img_path).split('.')[0] for img_path in original_df['img_filename']]
-    
-    # Split original filenames into train/val sets
-    train_size = int(0.9 * len(original_filenames))
-    indices = np.arange(len(original_filenames))
-    np.random.shuffle(indices)
-    train_indices = indices[:train_size]
-    val_indices = indices[train_size:]
-    
-    train_filenames = [original_filenames[i] for i in train_indices]
-    val_filenames = [original_filenames[i] for i in val_indices]
-    
-    # Find corresponding augmented indices
-    train_aug_indices = []
-    val_aug_indices = []
-    
-    for idx, row in augmented_df.iterrows():
-        # Extract original filename from augmented filename
-        # Example: "Augmented_Dataset/1751743551_1.jpg" -> "1751743551"
-        original_name = os.path.basename(row['img_filename']).split('_')[0]
-        
-        if original_name in train_filenames:
-            train_aug_indices.append(idx)
-        elif original_name in val_filenames:
-            val_aug_indices.append(idx)
-    
-    print(f"Original dataset: {len(original_df)} images")
-    print(f"Train set: {len(train_filenames)} original images, {len(train_aug_indices)} augmented images")
-    print(f"Val set: {len(val_filenames)} original images, {len(val_aug_indices)} augmented images")
-    
-    return train_aug_indices, val_aug_indices
-
 def main():
     # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
@@ -360,18 +316,14 @@ def main():
     ])
     
     # Create dataset
-    full_dataset = EyeTrackerDataset(csv_file="augmented_dataset.csv", transform=transform)
+    full_dataset = EyeTrackerDataset(csv_file="dataset.csv", transform=transform)
     
     # Check if dataset is not empty
     if len(full_dataset) == 0:
         raise ValueError("Dataset is empty. Please run dataset_generator.py first.")
     
-    # Get proper train/val split indices to prevent data leakage
-    train_indices, val_indices = get_proper_train_val_split()
-    
     # Create train and validation datasets using the indices
-    train_dataset = Subset(full_dataset, train_indices)
-    val_dataset = Subset(full_dataset, val_indices)
+    train_dataset, val_dataset = train_test_split(full_dataset, test_size=0.1, random_state=43)
 
     # Print dataset size
     print(f"Train dataset size: {len(train_dataset)}")
@@ -393,7 +345,7 @@ def main():
     
     try:
         # Train the model with early stopping
-        num_epochs = 50
+        num_epochs = 20
         train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, save_path="best_model.pth", patience=15)
     except KeyboardInterrupt:
         print("\nTraining interrupted by user. Loading best model for visualization...")

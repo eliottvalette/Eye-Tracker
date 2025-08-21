@@ -20,7 +20,7 @@ import time
 import threading
 
 TIME = 120
-CAPTURE_INTERVAL = 0.1  # Capture every 100ms
+CAPTURE_INTERVAL = 0.25  # Capture every 250ms
 
 # Creat directory if it doesn't exist
 os.makedirs("Dataset", exist_ok=True)

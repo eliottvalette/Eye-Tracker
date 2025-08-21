@@ -34,12 +34,8 @@ class DatasetGenerator:
         # Circle movement properties
         self.circle_x = width // 2
         self.circle_y = height // 2
-        self.circle_vx = rd.choice([-1, 1]) * rd.uniform(3, 4)
-        self.circle_vy = rd.choice([-1, 1]) * rd.uniform(3, 4)
-
-        # Curve direction
-        self.curve_x = rd.uniform(0.9, 1.1)
-        self.curve_y = rd.uniform(0.9, 1.1)
+        self.circle_vx = rd.choice([-1, 1]) * rd.uniform(6, 8)
+        self.circle_vy = rd.choice([-1, 1]) * rd.uniform(6, 8)
         
     def run_dataset_generator(self):
         start_time = time.time()
@@ -76,8 +72,8 @@ class DatasetGenerator:
         
     def update_circle_position_advanced(self):
         """Update circle position with advanced movement patterns"""
-        self.circle_x += self.circle_vx * self.curve_x
-        self.circle_y += self.circle_vy * self.curve_y
+        self.circle_x += self.circle_vx
+        self.circle_y += self.circle_vy
         
         # Check if circle is hitting the edges
         if self.circle_x <= 20 or self.circle_x >= self.width - 20:

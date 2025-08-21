@@ -17,23 +17,6 @@ for index, row in raw_df.iterrows():
 print(f"Exist count: {exist_count}")
 print(f"Not exist count: {not_exist_count}")
 
-print("Checking augmented dataset...")
-aug_df = pd.read_csv("augmented_dataset.csv")
-exist_count_augmented = 0
-not_exist_count_augmented = 0
-
-for index, row in aug_df.iterrows():
-    if not os.path.exists(row["img_filename"]):
-        print(f"Image {row['img_filename']} does not exist")
-        not_exist_count_augmented += 1
-    else:
-        exist_count_augmented += 1
-
-print(f"Exist count augmented: {exist_count_augmented}")
-print(f"Not exist count augmented: {not_exist_count_augmented}")
-
-
-
 print("\n---- Same but Reverse ----\n")
 
 os.makedirs("not_listed", exist_ok=True)

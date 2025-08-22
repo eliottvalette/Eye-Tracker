@@ -290,7 +290,7 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
     
     # Load augmented dataset to get true coordinates
     import pandas as pd
-    dataset_df = pd.read_csv("dataset.csv")
+    dataset_df = pd.read_csv("augmented_dataset.csv")
     
     plt.figure(figsize=(20, 5 * num_samples))
     

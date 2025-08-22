@@ -185,7 +185,7 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
                 print(f"Early stopping triggered after {epoch+1} epochs")
                 break
 
-        if epoch == 24 :
+        if epoch == 15 :
             patience /= 3
         
         print()
@@ -316,7 +316,7 @@ def main():
     ])
     
     # Create dataset
-    full_dataset = EyeTrackerDataset(csv_file="dataset.csv", transform=transform)
+    full_dataset = EyeTrackerDataset(csv_file="augmented_dataset.csv", transform=transform)
     
     # Check if dataset is not empty
     if len(full_dataset) == 0:
@@ -345,7 +345,7 @@ def main():
     
     try:
         # Train the model with early stopping
-        num_epochs = 20
+        num_epochs = 30
         train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, save_path="best_model.pth", patience=15)
     except KeyboardInterrupt:
         print("\nTraining interrupted by user. Loading best model for visualization...")

@@ -57,7 +57,7 @@ class Ranker:
         print(f"Found {len(image_files)} images to process")
         
         # Load augmented dataset to get true coordinates
-        dataset_df = pd.read_csv("dataset.csv")
+        dataset_df = pd.read_csv("augmented_dataset.csv")
         
         # Initialize list to store predictions
         predictions_list = []

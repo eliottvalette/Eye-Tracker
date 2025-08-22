@@ -353,10 +353,11 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
         
         # Plot 2D comparison: true vs predicted coordinates
         plt.subplot(num_samples, 4, i*4 + 4)
-        plt.scatter(true_x, true_y, c='black', s=100, marker='o', label='True', edgecolors='white', linewidth=2)
-        plt.scatter(pred_x, pred_y, c='red', s=100, marker='x', label='Predicted', linewidth=3)
+        plt.scatter(1 - true_x, 1 - true_y, c='black', s=100, marker='o', label='True', edgecolors='white', linewidth=2) # Flip y (pygame has y-axis inverted), Flip x, selfie Webcam is flipped
+        plt.scatter(1 - pred_x, 1 - pred_y, c='red', s=100, marker='x', label='Predicted', linewidth=3)
         plt.xlim(0, 1)
         plt.ylim(0, 1)
+
         # Remove inconsistent axis inversions for coordinate consistency
         plt.title(f"True vs Pred\nError: {np.sqrt((pred_x-true_x)**2 + (pred_y-true_y)**2):.3f}")
         plt.xlabel('X coordinate (normalized)')

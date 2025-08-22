@@ -110,10 +110,15 @@ class ActivationMapVisualizer:
         self.model.to(self.device)
         self.model.eval()
         
-        # Define transform for RGB input (consistent with training)
+        # Define transform for RGB input (EXACTLY as in training)
+        class ToTensorRGB(object):
+            """Convert numpy image to PyTorch tensor and normalize."""
+            def __call__(self, image):
+                # Convert from numpy to tensor and normalize
+                return torch.from_numpy(image.transpose((2, 0, 1))).float() / 255.0
+        
         self.transform = transforms.Compose([
-            transforms.ToPILImage(),
-            transforms.ToTensor(),
+            ToTensorRGB(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
         
@@ -125,14 +130,20 @@ class ActivationMapVisualizer:
         if not ret:
             return None, None
         
-        # Process frame the same way as in dataset generation
-        # Crop to 1080x1080
+        # Process frame EXACTLY the same way as in dataset generation
+        # Crop to 1080x1080 (HARDCODED like in training)
         height, width = frame.shape[:2]
-        center_x = width // 2
-        crop_size = min(height, width)
-        left_x = center_x - crop_size // 2
-        right_x = center_x + crop_size // 2
         
+        # Use EXACTLY the same crop coordinates as in training
+        left_x = 1920 // 2 - 1080 // 2
+        right_x = 1920 // 2 + 1080 // 2
+        
+        # Ensure we have enough pixels
+        if width < right_x or height < 1080:
+            print(f"Warning: Webcam resolution {width}x{height} is too small for 1080x1080 crop")
+            return None, None
+        
+        # Crop to 1080x1080 (same as training)
         cropped_frame = frame[:, left_x:right_x, :]
         
         # Resize to 224x224 for the model
@@ -270,9 +281,15 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
     # Initialize Grad-CAM
     grad_cam = GradCAM(model, model.pass_2[0])
     
-    # Define transform for RGB input
+    # Define transform for RGB input (EXACTLY as in training)
+    class ToTensorRGB(object):
+        """Convert numpy image to PyTorch tensor and normalize."""
+        def __call__(self, image):
+            # Convert from numpy to tensor and normalize
+            return torch.from_numpy(image.transpose((2, 0, 1))).float() / 255.0
+    
     transform = transforms.Compose([
-        transforms.ToTensor(),
+        ToTensorRGB(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     
@@ -300,8 +317,8 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
         img = img.resize((224, 224))
         img_array = np.array(img)
         
-        # Transform image
-        img_tensor = transform(img).unsqueeze(0).to(device)
+        # Transform image (convert PIL to numpy first)
+        img_tensor = transform(img_array).unsqueeze(0).to(device)
         
         # Generate activation map
         cam = grad_cam.generate_cam(img_tensor)

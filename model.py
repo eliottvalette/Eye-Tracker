@@ -12,6 +12,7 @@ class Model(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2), # 112x112x32 -> 56x56x32
         )
+
         self.pass_2 = nn.Sequential(
             nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1), # 56x56x32 -> 56x56x64
             nn.ReLU(),
@@ -20,6 +21,7 @@ class Model(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2), # 28x28x128 -> 14x14x128
         )
+        
         # For 224x224 input, the feature map size after pass_2 will be 14x14x128
         self.fc = nn.Sequential(
             nn.Flatten(),

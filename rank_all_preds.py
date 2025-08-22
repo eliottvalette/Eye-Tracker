@@ -23,10 +23,15 @@ class Ranker:
         self.model.to(self.device)
         self.model.eval()
         
-        # Define transform for RGB input (consistent with training)
+        # Define transform for RGB input (EXACTLY as in training)
+        class ToTensorRGB(object):
+            """Convert numpy image to PyTorch tensor and normalize."""
+            def __call__(self, image):
+                # Convert from numpy to tensor and normalize
+                return torch.from_numpy(image.transpose((2, 0, 1))).float() / 255.0
+        
         self.transform = transforms.Compose([
-            transforms.ToPILImage(),
-            transforms.ToTensor(),
+            ToTensorRGB(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
 
@@ -41,9 +46,15 @@ class Ranker:
         model.to(device)
         model.eval()
         
-        # Define transform for RGB input
+        # Define transform for RGB input (EXACTLY as in training)
+        class ToTensorRGB(object):
+            """Convert numpy image to PyTorch tensor and normalize."""
+            def __call__(self, image):
+                # Convert from numpy to tensor and normalize
+                return torch.from_numpy(image.transpose((2, 0, 1))).float() / 255.0
+        
         transform = transforms.Compose([
-            transforms.ToTensor(),
+            ToTensorRGB(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
         
@@ -68,8 +79,8 @@ class Ranker:
             img = img.resize((224, 224))
             img_array = np.array(img)
             
-            # Transform image
-            img_tensor = transform(img).unsqueeze(0).to(device)
+            # Transform image (convert PIL to numpy first)
+            img_tensor = transform(img_array).unsqueeze(0).to(device)
             
             # Get prediction
             with torch.no_grad():

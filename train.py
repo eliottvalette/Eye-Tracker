@@ -5,7 +5,7 @@ import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader, random_split, Subset
 from sklearn.model_selection import train_test_split
 
 import pandas as pd
@@ -322,12 +322,56 @@ def main():
     if len(full_dataset) == 0:
         raise ValueError("Dataset is empty. Please run dataset_generator.py first.")
     
-    # Create train and validation datasets using the indices
-    train_dataset, val_dataset = train_test_split(full_dataset, test_size=0.1, random_state=43)
+    # Create train and validation datasets using temporal split to avoid data leakage
+    # Since images are taken at 100ms intervals, we need to split by time ranges
+    # Use 20 validation ranges of 0.5% each, distributed throughout the dataset
+    total_size = len(full_dataset)
+    val_range_size = int(0.005 * total_size)  # 0.5% of dataset per validation range
+    
+    # Create 20 validation ranges distributed throughout the dataset
+    val_indices = []
+    train_indices = []
+    
+    for i in range(20):
+        # Calculate start and end indices for this validation range
+        start_idx = i * (total_size // 20) + (i * val_range_size // 20)
+        end_idx = start_idx + val_range_size
+        
+        # Ensure we don't exceed dataset bounds
+        end_idx = min(end_idx, total_size)
+        
+        # Add validation indices for this range
+        val_indices.extend(range(start_idx, end_idx))
+    
+    # Create train indices (all indices not in validation)
+    val_set = set(val_indices)
+    train_indices = [i for i in range(total_size) if i not in val_set]
+    
+    # Create subset datasets
+    train_dataset = Subset(full_dataset, train_indices)
+    val_dataset = Subset(full_dataset, val_indices)
 
-    # Print dataset size
+    # Print dataset size and temporal information
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Validation dataset size: {len(val_dataset)}")
+    print(f"Number of validation ranges: 20 (0.5% each)")
+    
+    # Print temporal range information for verification
+    val_ranges = []
+    for i in range(20):
+        start_idx = i * (total_size // 20) + (i * val_range_size // 20)
+        end_idx = min(start_idx + val_range_size, total_size)
+        if start_idx < total_size:
+            val_first_img = full_dataset.data.iloc[start_idx, 0]
+            val_last_img = full_dataset.data.iloc[end_idx-1, 0]
+            val_ranges.append(f"Range {i+1}: {val_first_img} to {val_last_img}")
+    
+    print("Validation temporal ranges (first 10 and last 10):")
+    for i in range(0, 10):
+        print(f"  {val_ranges[i]}")
+    print("  ...")
+    for i in range(10, 20):
+        print(f"  {val_ranges[i]}")
     
     # Create data loaders - set num_workers=0 to avoid multiprocessing issues
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=0)

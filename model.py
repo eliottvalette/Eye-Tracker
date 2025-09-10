@@ -25,13 +25,18 @@ class Model(nn.Module):
         # For 224x224 input, the feature map size after pass_2 will be 14x14x128
         self.fc = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(128 * 14 * 14, 128 * 14),
+            nn.Linear(128 * 14 * 14, 512),  # Reduced complexity
+            nn.BatchNorm1d(512),
             nn.ReLU(),
-            nn.Linear(128 * 14, 512),
+            nn.Dropout(0.3),  # Increased dropout
+            nn.Linear(512, 256),
+            nn.BatchNorm1d(256),
             nn.ReLU(),
-            nn.Linear(512, 128),
+            nn.Dropout(0.2),  # Increased dropout
+            nn.Linear(256, 64),
             nn.ReLU(),
-            nn.Linear(128, 2)  # Output x, y coordinates
+            nn.Dropout(0.1),  # Increased dropout
+            nn.Linear(64, 2)  # Output x, y coordinates
         )
     
     def forward(self, x):

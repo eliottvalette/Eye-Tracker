@@ -29,16 +29,6 @@ class ToTensorRGB(object):
         # Convert from numpy to tensor and normalize
         return torch.from_numpy(image.transpose((2, 0, 1))).float() / 255.0
 
-# New grayscale tensor converter
-class ToTensorGray(object):
-    """Convert numpy RGB image to single-channel grayscale tensor and normalize."""
-    def __call__(self, image):
-        # Convert RGB numpy array to grayscale (H x W)
-        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        # Add channel dimension and convert to tensor
-        gray = np.expand_dims(gray, axis=2)  # H x W x 1
-        return torch.from_numpy(gray.transpose((2, 0, 1))).float() / 255.0
-
 class EyeTrackerDataset(Dataset):
     def __init__(self, csv_file, transform=None):
         self.data = pd.read_csv(csv_file)
@@ -303,11 +293,6 @@ def main():
     # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
-    
-    # Set random seed for reproducibility
-    torch.manual_seed(43)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(43)
     
     # Define transforms for RGB images
     transform = transforms.Compose([

@@ -17,6 +17,29 @@ for index, row in raw_df.iterrows():
 print(f"Exist count: {exist_count}")
 print(f"Not exist count: {not_exist_count}")
 
+# Remove rows with missing images from CSV
+if not_exist_count > 0:
+    print(f"\nFound {not_exist_count} rows with missing images.")
+    response = input("Do you want to remove these rows from the CSV? (yes/no): ")
+    
+    if response.lower() in ['yes', 'y']:
+        # Create a new dataframe with only existing images
+        existing_rows = []
+        for index, row in raw_df.iterrows():
+            if os.path.exists(row["img_filename"]):
+                existing_rows.append(row)
+        
+        # Create new dataframe and save
+        cleaned_df = pd.DataFrame(existing_rows)
+        cleaned_df.to_csv("dataset.csv", index=False)
+        print(f"Successfully removed {not_exist_count} rows from dataset.csv")
+        print(f"Dataset now contains {len(cleaned_df)} rows")
+        
+        # Update raw_df for the rest of the script
+        raw_df = cleaned_df
+    else:
+        print("CSV cleanup cancelled.")
+
 print("\n---- Same but Reverse ----\n")
 
 os.makedirs("not_listed", exist_ok=True)

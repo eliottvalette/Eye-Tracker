@@ -2,7 +2,6 @@ import os
 import pandas as pd
 import cv2
 import numpy as np
-from tqdm import tqdm
 import random as rd
 
 # Créer le dossier pour les images augmentées
@@ -31,20 +30,51 @@ for idx, row in df.iterrows():
     # Charger l'image
     img = cv2.imread(img_full_path)
 
-    rd_float = rd.random()
-    
-    if rd_float < 0.2:
+    # All augmentations have the same probability to happen
+    aug_type = rd.randint(0, 6)
+    if aug_type == 0:
+        # No augmentation
         aug_img = img.copy()
-    elif rd_float < 0.75:
-        # Augmentation de luminosité avec OpenCV
-        beta = rd.uniform(-50, 50)
-        aug_img = cv2.convertScaleAbs(img, beta=beta)
-    else:
-        # shift lateral avec bordure miroir
-        shift = rd.uniform(-10, 10)
+    elif aug_type == 1:
+        # Brightness/contrast
+        alpha = rd.uniform(0.3, 2.5)  # Contrast
+        beta = rd.uniform(-30, 30)    # Brightness
+        aug_img = cv2.convertScaleAbs(img, alpha=alpha, beta=beta)
+    elif aug_type == 2:
+        # Horizontal shift
+        shift = rd.uniform(-30, 30)
         M = np.float32([[1, 0, shift], [0, 1, 0]])
         aug_img = cv2.warpAffine(img, M, (img.shape[1], img.shape[0]), 
                                 borderMode=cv2.BORDER_REFLECT_101)
+    elif aug_type == 3:
+        # Vertical shift
+        shift = rd.uniform(-20, 20)
+        M = np.float32([[1, 0, 0], [0, 1, shift]])
+        aug_img = cv2.warpAffine(img, M, (img.shape[1], img.shape[0]), 
+                                borderMode=cv2.BORDER_REFLECT_101)
+    elif aug_type == 4:
+        # Blur
+        aug_img = cv2.GaussianBlur(img, (3, 3), 0)
+    elif aug_type == 5:
+        # Color channel manipulation
+        b, g, r = cv2.split(img)
+        channel_mult = rd.uniform(0.5, 1.8)
+        channel_idx = rd.randint(0, 2)
+        channels = [b, g, r]
+        channels[channel_idx] = cv2.multiply(channels[channel_idx], channel_mult)
+        aug_img = cv2.merge(channels)
+    elif aug_type == 6:
+        # Perspective transformation
+        h, w = img.shape[:2]
+        pts1 = np.float32([[0, 0], [w, 0], [0, h], [w, h]])
+        offset = rd.uniform(-0.1, 0.1)
+        pts2 = np.float32([[offset*w, offset*h], 
+                          [w-offset*w, offset*h], 
+                          [offset*w, h-offset*h], 
+                          [w-offset*w, h-offset*h]])
+        M = cv2.getPerspectiveTransform(pts1, pts2)
+        aug_img = cv2.warpPerspective(img, M, (w, h), 
+                                    borderMode=cv2.BORDER_REFLECT_101)
         
     # Créer le nom du fichier
     aug_save_path = f"Augmented_Dataset/{filename}"

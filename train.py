@@ -369,7 +369,7 @@ def main():
         model.load_model("best_model.pth")
     
     # Define loss function and optimizer with weight decay for regularization
-    criterion = nn.L1Loss()
+    criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
     
     try:

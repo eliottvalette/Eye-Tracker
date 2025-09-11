@@ -275,7 +275,7 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
     model.eval()
     
     # Initialize Grad-CAM
-    grad_cam = GradCAM(model, model.pass_4[0])
+    grad_cam = GradCAM(model, model.pass_2[0])
     
     # Define transform for RGB input (EXACTLY as in training)
     class ToTensorRGB(object):

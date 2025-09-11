@@ -3,103 +3,73 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class Model(nn.Module):
-    def __init__(self, tau=1.0):
+    def __init__(self):
         super().__init__()
-        self.tau = tau
-
-        # Encoder
-        self.encoder_1 = nn.Sequential(
-            nn.Conv2d(3, 16, 3, padding=1), nn.ReLU(inplace=True),
-            nn.Conv2d(16, 16, 3, padding=1), nn.ReLU(inplace=True),
-        )
-        self.pool_1 = nn.MaxPool2d(2)
-
-        self.encoder_2 = nn.Sequential(
-            nn.Conv2d(16, 32, 3, padding=1), nn.ReLU(inplace=True),
-            nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(inplace=True),
-        )
-        self.pool_2 = nn.MaxPool2d(2)
-
-        self.encoder_3 = nn.Sequential(
-            nn.Conv2d(32, 64, 3, padding=1), nn.ReLU(inplace=True),
-            nn.Conv2d(64, 64, 3, padding=1), nn.ReLU(inplace=True),
-        )
-        self.pool_3 = nn.MaxPool2d(2)
-
-        self.encoder_4 = nn.Sequential(
-            nn.Conv2d(64, 128, 3, padding=1), nn.ReLU(inplace=True),
-            nn.Conv2d(128, 128, 3, padding=1), nn.ReLU(inplace=True),
-        )
-        self.pool_4 = nn.MaxPool2d(2)
-
-        # Bottleneck
-        self.bottleneck = nn.Sequential(
-            nn.Conv2d(128, 256, 3, padding=1), nn.ReLU(inplace=True),
-            nn.Conv2d(256, 256, 3, padding=1), nn.ReLU(inplace=True),
+        # Spatial gating map per channel in [0,1]
+        self.heatmap = nn.Sequential(
+            nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 3, kernel_size=3, stride=1, padding=1),
+            nn.Sigmoid()
         )
 
-        # Decoder (transpose conv + convs after skip concat)
-        self.up_3 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
-        self.decoder_3 = nn.Sequential(
-            nn.Conv2d(128 + 128, 128, 3, padding=1), nn.ReLU(inplace=True),
-            nn.Conv2d(128, 128, 3, padding=1), nn.ReLU(inplace=True),
+        self.pass_1 = nn.Sequential( 
+            nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1),  # 224x224 -> 224x224
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),                  # -> 112x112
         )
 
-        self.up_2 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
-        self.decoder_2 = nn.Sequential(
-            nn.Conv2d(64 + 64, 64, 3, padding=1), nn.ReLU(inplace=True),
-            nn.Conv2d(64, 64, 3, padding=1), nn.ReLU(inplace=True),
+        self.pass_2 = nn.Sequential(
+            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),  # 112x112
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),                  # -> 56x56
         )
 
-        self.up_1 = nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2)
-        self.decoder_1 = nn.Sequential(
-            nn.Conv2d(32 + 32, 32, 3, padding=1), nn.ReLU(inplace=True),
-            nn.Conv2d(32, 32, 3, padding=1), nn.ReLU(inplace=True),
+        self.pass_3 = nn.Sequential(
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),  # 56x56
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),                  # -> 28x28
         )
 
-        self.up_0 = nn.ConvTranspose2d(32, 16, kernel_size=2, stride=2)
-        self.decoder_0 = nn.Sequential(
-            nn.Conv2d(16 + 16, 16, 3, padding=1), nn.ReLU(inplace=True),
-            nn.Conv2d(16, 16, 3, padding=1), nn.ReLU(inplace=True),
+        self.pass_4 = nn.Sequential(
+            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1), # 28x28
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),                  # -> 14x14
         )
 
-        # Heatmap head and soft-argmax to (x,y) in [0,1]
-        self.out_conv = nn.Conv2d(16, 1, kernel_size=1)
-
-    def forward(self, x, return_heatmap=False):
-        # Encoder
-        e1 = self.encoder_1(x)            # H x W
-        p1 = self.pool_1(e1)              # H/2
-        e2 = self.encoder_2(p1)           # H/2
-        p2 = self.pool_2(e2)              # H/4
-        e3 = self.encoder_3(p2)           # H/4
-        p3 = self.pool_3(e3)              # H/8
-        e4 = self.encoder_4(p3)           # H/8
-        p4 = self.pool_4(e4)              # H/16
-
-        b  = self.bottleneck(p4)          # H/16
-
-        # Decoder with skips
-        u3 = self.up_3(b)                 # H/8
-        d3 = self.decoder_3(torch.cat([u3, e4], dim=1))
-
-        u2 = self.up_2(d3)                # H/4
-        d2 = self.decoder_2(torch.cat([u2, e3], dim=1))
-
-        u1 = self.up_1(d2)                # H/2
-        d1 = self.decoder_1(torch.cat([u1, e2], dim=1))
-
-        u0 = self.up_0(d1)                # H
-        d0 = self.decoder_0(torch.cat([u0, e1], dim=1))
-
-        heatmap = self.out_conv(d0)       # (N,1,H,W)
-        print('heatmap', heatmap)
-        coords = torch.argmax(heatmap)  # (N,2) in [0,1]
-
-        return (coords, heatmap) if return_heatmap else coords
-
+        # 224x224 input -> 14x14x128 before FC
+        self.fc = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(128 * 14 * 14, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(512, 256),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(256, 64),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(64, 2)
+        )
+    
+    def forward(self, x):
+        h = self.heatmap(x)         # (N,3,H,W) in [0,1]
+        x = x * (1.0 + h)           # gated residual on input
+        x = self.pass_1(x)
+        x = self.pass_2(x)
+        x = self.pass_3(x)
+        x = self.pass_4(x)
+        x = self.fc(x)
+        x = torch.sigmoid(x)        # normalize to [0,1]
+        return x
+    
     def save_model(self, path):
         torch.save(self.state_dict(), path)
+    
+    def load_model(self, path, map_location="cpu", strict: bool = False):
+        state = torch.load(path, map_location=map_location)
+        self.load_state_dict(state, strict=strict)  # strict=False avoids key mismatches across arches
+        self.eval()
 
-    def load_model(self, path, map_location=None):
-        self.load_state_dict(torch.load(path, map_location=map_location))

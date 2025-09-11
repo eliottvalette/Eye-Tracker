@@ -52,41 +52,37 @@ class GradCAM:
             hook.remove()
             
     def generate_cam(self, input_image):
-        """Generate the class activation map for the input image."""
-        # Forward pass
-        output = self.model(input_image)
-        
-        # Create a vector of ones for backpropagation
-        # This is a simple approach for regression; we can backpropagate with respect to all outputs
-        one_hot = torch.ones(output.size()).to(input_image.device)
-        
-        # Zero all existing gradients
-        self.model.zero_grad()
-        
-        # Backward pass with the one-hot vector
-        output.backward(gradient=one_hot)
-        
-        # Get the gradients and activations
-        gradients = self.gradients
-        activations = self.activations
-        
-        # Global average pooling of the gradients
-        weights = torch.mean(gradients, dim=[2, 3], keepdim=True)
-        
-        # Weighted combination of the activation maps
-        cam = torch.sum(weights * activations, dim=1, keepdim=True)
-        
-        # ReLU on the CAM
+        """
+        input_image: (1,3,H,W) tensor
+        Retourne cam numpy (Hc, Wc) upsamplée à l'entrée ensuite par l'appelant.
+        """
+        # Forward
+        output = self.model(input_image)          # (1,2)
+        score = output.sum()                      # scalaire pour backprop
+
+        # Backward
+        self.model.zero_grad(set_to_none=True)
+        score.backward(retain_graph=False)
+
+        # Récup
+        gradients = self.gradients                # (B,C,Hc,Wc)
+        activations = self.activations            # (B,C,Hc,Wc)
+
+        # Poids = GAP des gradients
+        weights = gradients.mean(dim=(2,3), keepdim=True)   # (B,C,1,1)
+
+        # Combinaison linéaire
+        cam = (weights * activations).sum(dim=1, keepdim=True)  # (B,1,Hc,Wc)
         cam = torch.relu(cam)
-        
-        # Normalize the CAM
-        if torch.max(cam) > 0:
-            cam = cam / torch.max(cam)
-        
-        # Resize CAM to the size of the input image
-        cam = cam.squeeze().cpu().data.numpy()
-        
+
+        # Normalisation par carte
+        cam_max = cam.amax(dim=(2,3), keepdim=True).clamp(min=1e-6)
+        cam = cam / cam_max
+
+        # Vers numpy 2D
+        cam = cam.squeeze().detach().cpu().numpy()
         return cam
+
 
 class ActivationMapVisualizer:
     def __init__(self, model_path="best_model.pth", width=1500, height=840):
@@ -164,7 +160,7 @@ class ActivationMapVisualizer:
         cam = self.grad_cam.generate_cam(image_tensor)
         
         # Resize CAM to the size of the input image
-        cam = cv2.resize(cam, (224, 224))
+        cam = cv2.resize(cam, (224, 224), interpolation=cv2.INTER_CUBIC)
         
         # Apply colormap to CAM
         heatmap = cv2.applyColorMap(np.uint8(255 * cam), cv2.COLORMAP_JET)
@@ -279,7 +275,7 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
     model.eval()
     
     # Initialize Grad-CAM
-    grad_cam = GradCAM(model, model.pass_2[0])
+    grad_cam = GradCAM(model, model.pass_4[0])
     
     # Define transform for RGB input (EXACTLY as in training)
     class ToTensorRGB(object):

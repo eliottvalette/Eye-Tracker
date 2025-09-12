@@ -250,10 +250,7 @@ def visualize_predictions(model, loader, device, name):
     plt.figure(figsize=(10, 10))
     
     # Plot actual coordinates with very low opacity
-    plt.scatter(actual_coords[:, 0], actual_coords[:, 1], c='blue', alpha=0.2, label='Actual')
-    
-    # Plot predicted coordinates with color based on distance
-    plt.scatter(pred_coords[:, 0], pred_coords[:, 1], c=colors, alpha=0.7, label='Predicted')
+    plt.scatter(actual_coords[:, 0], actual_coords[:, 1], c=colors, alpha=0.9, label='Actual')
     
     # Add reference lines for x=y
     plt.axhline(y=0.5, color='gray', linestyle='--', alpha=0.3)

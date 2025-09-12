@@ -14,43 +14,43 @@ class Model(nn.Module):
         )
 
         self.pass_1 = nn.Sequential( 
-            nn.Conv2d(4, 16, kernel_size=3, stride=1, padding=1),  # 224x224 -> 224x224
+            nn.Conv2d(4, 16, kernel_size=3, stride=1, padding=1),  # 224x224x4 -> 224x224x16
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),                  # -> 112x112
+            nn.MaxPool2d(kernel_size=2, stride=2),                  # -> 112x112x16
         )
 
         self.pass_2 = nn.Sequential(
-            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),  # 112x112
+            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),  # 112x112x16 -> 112x112x32
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),                  # -> 56x56
+            nn.MaxPool2d(kernel_size=2, stride=2),                  # -> 56x56x32
         )
 
         self.pass_3 = nn.Sequential(
-            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),  # 56x56
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),  # 56x56x32 -> 56x56x64
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),                  # -> 28x28
+            nn.MaxPool2d(kernel_size=2, stride=2),                  # -> 28x28x64
         )
 
         self.pass_4 = nn.Sequential(
-            nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1), # 28x28
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1), # 28x28x64 -> 28x28x64
             nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),                  # -> 14x14
+            nn.MaxPool2d(kernel_size=2, stride=2),                  # -> 14x14x64
         )
 
         # 224x224 input -> 14x14x128 before FC
         self.fc = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(128 * 14 * 14, 512),
-            nn.BatchNorm1d(512),
+            nn.Linear(64 * 14 * 14, 64 * 14), 
+            nn.BatchNorm1d(64 * 14),
             nn.ReLU(),
             nn.Dropout(0.3),
-            nn.Linear(512, 256),
-            nn.BatchNorm1d(256),
+            nn.Linear(64 * 14, 512),
+            nn.BatchNorm1d(512),
             nn.ReLU(),
             nn.Dropout(0.2),
-            nn.Linear(256, 64),
+            nn.Linear(512, 64),
+            nn.BatchNorm1d(64),
             nn.ReLU(),
-            nn.Dropout(0.1),
             nn.Linear(64, 2)
         )
     

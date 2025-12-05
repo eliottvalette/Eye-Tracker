@@ -226,11 +226,14 @@ class ActivationMapVisualizer:
                 self.last_original_img = model_input
                 
                 # Convert numpy array to pygame surface for display
-                webcam_surface = pygame.surfarray.make_surface(display_frame.swapaxes(0, 1))
+                flipped_frame = np.flip(display_frame, axis=1)
+                webcam_surface = pygame.surfarray.make_surface(flipped_frame.swapaxes(0, 1))
+
                 
                 # Convert activation map to pygame surface
                 superimposed_resized = cv2.resize(superimposed, (400, 400))
-                heatmap_surface = pygame.surfarray.make_surface(superimposed_resized.swapaxes(0, 1))
+                superimposed_resized_flipped = np.flip(superimposed_resized, axis=1)
+                heatmap_surface = pygame.surfarray.make_surface(superimposed_resized_flipped.swapaxes(0, 1))
                 
                 # Display webcam feed in top-left corner
                 self.screen.blit(webcam_surface, (20, 20))

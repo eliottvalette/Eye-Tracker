@@ -5,16 +5,8 @@ import torch.nn.functional as F
 class Model(nn.Module):
     def __init__(self):
         super().__init__()
-        # Spatial gating map per channel in [0,1]
-        self.heatmap = nn.Sequential(
-            nn.Conv2d(3, 16, kernel_size=5, stride=1, padding=2),
-            nn.ReLU(),
-            nn.Conv2d(16, 1, kernel_size=5, stride=1, padding=2),
-            nn.Sigmoid()
-        )
-
         self.pass_1 = nn.Sequential( 
-            nn.Conv2d(4, 16, kernel_size=3, stride=1, padding=1),  # 224x224x4 -> 224x224x16
+            nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1),  # 224x224x4 -> 224x224x16
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2),                  # -> 112x112x16
         )
@@ -55,8 +47,6 @@ class Model(nn.Module):
         )
     
     def forward(self, x):
-        h = self.heatmap(x)         # (N,3,H,W) in [0,1]
-        x = torch.cat([x, h], dim=1)
         x = self.pass_1(x)
         x = self.pass_2(x)
         x = self.pass_3(x)

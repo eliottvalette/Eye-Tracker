@@ -304,10 +304,11 @@ def main():
         raise ValueError("Dataset is empty. Please run dataset_generator.py first.")
 
     total_size = len(full_dataset)
-    val_size = int(0.1 * total_size)
+    val_first = int(0.05 * total_size)
+    val_last = int(0.05 * total_size)
 
-    train_indices = list(range(val_size, total_size))
-    val_indices = list(range(val_size))
+    val_indices = list(range(0, val_first)) + list(range(total_size - val_last, total_size))
+    train_indices = list(range(val_first, total_size - val_last))
 
     train_dataset = Subset(full_dataset, train_indices)
     val_dataset = Subset(full_dataset, val_indices)

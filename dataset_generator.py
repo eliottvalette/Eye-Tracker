@@ -101,8 +101,24 @@ class DatasetGenerator:
 
     def update_circle_position_advanced(self):
         """Update circle position with advanced movement patterns"""
-        self.circle_x += self.circle_vx * self.curve_x
-        self.circle_y += self.circle_vy * self.curve_y
+        # Calculate distance from center
+        center_x = self.width // 2
+        center_y = self.height // 2
+        distance_from_center = ((self.circle_x - center_x)**2 + (self.circle_y - center_y)**2)**0.5
+        
+        # Maximum distance from center (diagonal)
+        max_distance = ((self.width // 2)**2 + (self.height // 2)**2)**0.5
+        
+        # Speed multiplier: closer to center = faster (inverse relationship)
+        # Normalize distance (0 at center, 1 at edge)
+        normalized_distance = distance_from_center / max_distance
+        
+        # Speed multiplier: 2.0 at center, 1.0 at edge
+        speed_multiplier = 2.0 - normalized_distance
+        
+        # Apply speed multiplier to velocities
+        self.circle_x += self.circle_vx * self.curve_x * speed_multiplier
+        self.circle_y += self.circle_vy * self.curve_y * speed_multiplier
         
         # Check if circle is hitting the edges
         if self.circle_x <= 20 or self.circle_x >= self.width - 20:

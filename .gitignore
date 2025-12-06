@@ -2,6 +2,7 @@ Dataset/
 Augmented_Dataset/
 .venv/
 __pycache__/
+*.pyc
 .DS_Store
-*.pth
 Old/
+viz/dataset_activation_maps.png

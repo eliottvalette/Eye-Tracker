@@ -79,7 +79,7 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
         
         print("Overfitting on a single batch to set up weights...")
         # Train for a few iterations on this single batch
-        for i in range(OVERFIT_ITERATIONS):  # 200 iterations should be enough to overfit
+        for i in range(OVERFIT_ITERATIONS):  # 100 iterations should be enough to overfit
             # Zero the gradients
             optimizer.zero_grad()
             

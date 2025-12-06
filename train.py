@@ -325,12 +325,12 @@ def main():
         model.load_model("best_model.pth")
     
     # Define loss function and optimizer with weight decay for regularization
-    criterion = nn.L1Loss()
+    criterion = nn.SmoothL1Loss(beta=0.01)
     optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
     
     try:
         # Train the model with early stopping
-        num_epochs = 30
+        num_epochs = 50
         train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, save_path="best_model.pth", patience=15)
     except KeyboardInterrupt:
         print("\nTraining interrupted by user. Loading best model for visualization...")

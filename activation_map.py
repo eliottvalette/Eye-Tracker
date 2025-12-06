@@ -13,6 +13,7 @@ from model import Model
 import pygame
 from PIL import Image
 import os
+import time
 
 VIZ_DIR = "viz"
 os.makedirs(VIZ_DIR, exist_ok=True)
@@ -118,8 +119,13 @@ class ActivationMapVisualizer:
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
         
-        # Initialize Grad-CAM with the target layer (last convolutional layer)
-        self.grad_cam = GradCAM(self.model, self.model.pass_2[0])  # Use the first conv layer in pass_2
+        # Initialize Grad-CAM with the target layer
+        # Use layer1 for better spatial resolution (56x56)
+        self.grad_cam = GradCAM(self.model, self.model.layer1[-1].conv2)
+        
+        # Buffer for temporal smoothing (300ms window)
+        self.prediction_buffer = []  # List of (timestamp, x, y) tuples
+        self.smoothing_window_ms = 300
         
     def process_webcam_frame(self):
         ret, frame = self.cap.read()
@@ -220,6 +226,26 @@ class ActivationMapVisualizer:
                 # Make prediction with activation map
                 pred_x, pred_y, superimposed, cam, norm_x, norm_y = self.predict_with_activation_map(model_input)
                 
+                # Add prediction to buffer with current timestamp
+                current_time = time.time() * 1000  # Convert to milliseconds
+                self.prediction_buffer.append((current_time, norm_x, norm_y))
+                
+                # Remove predictions older than 300ms
+                cutoff_time = current_time - self.smoothing_window_ms
+                self.prediction_buffer = [(t, x, y) for t, x, y in self.prediction_buffer if t > cutoff_time]
+                
+                # Calculate mean of predictions in the last 300ms
+                if self.prediction_buffer:
+                    mean_x = np.mean([x for _, x, _ in self.prediction_buffer])
+                    mean_y = np.mean([y for _, _, y in self.prediction_buffer])
+                    smoothed_screen_x = mean_x * self.width
+                    smoothed_screen_y = mean_y * self.height
+                else:
+                    mean_x = norm_x
+                    mean_y = norm_y
+                    smoothed_screen_x = pred_x
+                    smoothed_screen_y = pred_y
+                
                 # Save for potential saving
                 self.last_cam = cam
                 self.last_superimposed = superimposed
@@ -241,16 +267,16 @@ class ActivationMapVisualizer:
                 # Display heatmap next to it
                 self.screen.blit(heatmap_surface, (440, 20))
                 
-                # Draw predicted gaze position
-                pygame.draw.circle(self.screen, (0, 255, 0), (int(pred_x), int(pred_y)), 20)
+                # Draw predicted gaze position (smoothed)
+                pygame.draw.circle(self.screen, (0, 255, 0), (int(smoothed_screen_x), int(smoothed_screen_y)), 20)
                 
-                # Draw a line from the center to the predicted position
-                pygame.draw.line(self.screen, (255, 0, 0), (self.width//2, self.height//2), (int(pred_x), int(pred_y)), 2)
+                # Draw a line from the center to the smoothed predicted position
+                pygame.draw.line(self.screen, (255, 0, 0), (self.width//2, self.height//2), (int(smoothed_screen_x), int(smoothed_screen_y)), 2)
                 
                 # Display both normalized and screen coordinates for clarity
                 font = pygame.font.Font(None, 36)
-                text1 = font.render(f"Screen: ({pred_x:.1f}, {pred_y:.1f})", True, (255, 255, 255))
-                text2 = font.render(f"Normalized: ({norm_x:.3f}, {norm_y:.3f})", True, (255, 255, 255))
+                text1 = font.render(f"Screen: ({smoothed_screen_x:.1f}, {smoothed_screen_y:.1f})", True, (255, 255, 255))
+                text2 = font.render(f"Normalized: ({mean_x:.3f}, {mean_y:.3f})", True, (255, 255, 255))
                 self.screen.blit(text1, (20, 430))
                 self.screen.blit(text2, (20, 470))
                 
@@ -277,8 +303,9 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
     model.to(device)
     model.eval()
     
-    # Initialize Grad-CAM
-    grad_cam = GradCAM(model, model.pass_2[0])
+    # Initialize Grad-CAM with the target layer
+    # Use layer1 for better spatial resolution (56x56)
+    grad_cam = GradCAM(model, model.layer1[-1].conv2)
     
     # Define transform for RGB input (EXACTLY as in training)
     class ToTensorRGB(object):

@@ -121,10 +121,10 @@ class DatasetGenerator:
         self.circle_y += self.circle_vy * self.curve_y * speed_multiplier
         
         # Check if circle is hitting the edges
-        if self.circle_x <= 20 or self.circle_x >= self.width - 20:
+        if self.circle_x <= 50 or self.circle_x >= self.width - 50:
             self.circle_vx *= -1
         
-        if self.circle_y <= 20 or self.circle_y >= self.height - 20:
+        if self.circle_y <= 50 or self.circle_y >= self.height - 50:
             self.circle_vy *= -1
 
     def continuous_capture(self):

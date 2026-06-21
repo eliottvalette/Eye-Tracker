@@ -39,19 +39,27 @@ class EyeTrackerDataset(Dataset):
         return len(self.data)
     
     def __getitem__(self, idx):
-        img_path = self.data.iloc[idx, 0]
-        image = cv2.imread(img_path)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
+        row = self.data.iloc[idx]
         
-        # Get coordinates (normalized)
-        x = self.data.iloc[idx, 1]
-        y = self.data.iloc[idx, 2]
-        coordinates = torch.tensor([x, y], dtype=torch.float32)
+        # Main image
+        image = cv2.cvtColor(cv2.imread(row['img_filename']), cv2.COLOR_BGR2RGB)
+        
+        # Eye images (Fallback handled in preprocessing)
+        left_eye = cv2.cvtColor(cv2.imread(row['left_eye_img']), cv2.COLOR_BGR2RGB)
+        right_eye = cv2.cvtColor(cv2.imread(row['right_eye_img']), cv2.COLOR_BGR2RGB)
+        
+        # Target
+        target_coords = torch.tensor([row['x'], row['y']], dtype=torch.float32)
+        
+        # Eye coordinates
+        eye_coords = torch.tensor([row['lx'], row['ly'], row['rx'], row['ry']], dtype=torch.float32)
         
         if self.transform:
             image = self.transform(image)
+            left_eye = self.transform(left_eye)
+            right_eye = self.transform(right_eye)
         
-        return image, coordinates
+        return (image, left_eye, right_eye, eye_coords), target_coords
 
 def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device, save_path, patience):#
     model.to(device)
@@ -67,15 +75,16 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
         images_list = []
         targets_list = []
         for _ in range(2):
-            batch_images, batch_targets = next(train_iter)
-            images_list.append(batch_images)
+            (batch_img, batch_left, batch_right, batch_ecoords), batch_targets = next(train_iter)
+            images_list.append((batch_img, batch_left, batch_right, batch_ecoords))
             targets_list.append(batch_targets)
         
         # Concatenate all batches
-        images = torch.cat(images_list, dim=0)
-        targets = torch.cat(targets_list, dim=0)
-        images = images.to(device)
-        targets = targets.to(device)
+        images = torch.cat([i[0] for i in images_list], dim=0).to(device)
+        left_eyes = torch.cat([i[1] for i in images_list], dim=0).to(device)
+        right_eyes = torch.cat([i[2] for i in images_list], dim=0).to(device)
+        eye_coords = torch.cat([i[3] for i in images_list], dim=0).to(device)
+        targets = torch.cat(targets_list, dim=0).to(device)
         
         print("Overfitting on a single batch to set up weights...")
         # Train for a few iterations on this single batch
@@ -84,7 +93,7 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
             optimizer.zero_grad()
             
             # Forward pass
-            outputs = model(images)
+            outputs = model(images, left_eyes, right_eyes, eye_coords)
             loss = criterion(outputs, targets)
             
             # Backward pass and optimize
@@ -112,15 +121,18 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
         
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}")
         batch_count = 0
-        for images, targets in progress_bar:
+        for (images, left_eyes, right_eyes, eye_coords), targets in progress_bar:
             images = images.to(device)
+            left_eyes = left_eyes.to(device)
+            right_eyes = right_eyes.to(device)
+            eye_coords = eye_coords.to(device)
             targets = targets.to(device)
             
             # Zero the gradients
             optimizer.zero_grad()
             
             # Forward pass
-            outputs = model(images)
+            outputs = model(images, left_eyes, right_eyes, eye_coords)
             loss = criterion(outputs, targets)
             
             # Backward pass and optimize
@@ -144,11 +156,14 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
         val_progress_bar = tqdm(val_loader, desc="Validation")
         val_batch_count = 0
         with torch.no_grad():
-            for images, targets in val_progress_bar:
+            for (images, left_eyes, right_eyes, eye_coords), targets in val_progress_bar:
                 images = images.to(device)
+                left_eyes = left_eyes.to(device)
+                right_eyes = right_eyes.to(device)
+                eye_coords = eye_coords.to(device)
                 targets = targets.to(device)
                 
-                outputs = model(images)
+                outputs = model(images, left_eyes, right_eyes, eye_coords)
                 val_loss = criterion(outputs, targets)
                 
                 running_val_loss += val_loss.item() * images.size(0)
@@ -212,9 +227,12 @@ def visualize_predictions(model, loader, device, name):
     
     # Get predictions from validation set
     with torch.no_grad():
-        for images, targets in tqdm(loader, desc=f"Generating predictions for {name}"):
+        for (images, left_eyes, right_eyes, eye_coords), targets in tqdm(loader, desc=f"Generating predictions for {name}"):
             images = images.to(device)
-            outputs = model(images)
+            left_eyes = left_eyes.to(device)
+            right_eyes = right_eyes.to(device)
+            eye_coords = eye_coords.to(device)
+            outputs = model(images, left_eyes, right_eyes, eye_coords)
             
             # Move to CPU and convert to numpy
             targets = targets.cpu().numpy()
@@ -298,7 +316,7 @@ def main():
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     
-    full_dataset = EyeTrackerDataset(csv_file="augmented_dataset.csv", transform=transform, keep_every=0)
+    full_dataset = EyeTrackerDataset(csv_file="dataset_eyes.csv", transform=transform, keep_every=0)
 
     if len(full_dataset) == 0:
         raise ValueError("Dataset is empty. Please run dataset_generator.py first.")

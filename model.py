@@ -39,6 +39,24 @@ class BasicBlock(nn.Module):
         out = self.relu(out)
         return out
 
+class EyeBranch(nn.Module):
+    # Compact CNN for 31x41 eye crops
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2), # 31x41 -> 15x20
+            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten()
+        )
+    def forward(self, x):
+        return self.net(x)
+
 class Model(nn.Module):
     def __init__(self):
         super().__init__()
@@ -54,10 +72,14 @@ class Model(nn.Module):
         self.layer2 = self._make_layer(32, 64, blocks=2, stride=2)            # 28x28
         self.layer3 = self._make_layer(64, 128, blocks=2, stride=2)           # 14x14
 
+        self.left_eye = EyeBranch()
+        self.right_eye = EyeBranch()
+        self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.flatten = nn.Flatten()
+
+        # 128 (stem) + 32 (left) + 32 (right) + 4 (coords) = 196
         self.head = nn.Sequential(
-            nn.AdaptiveAvgPool2d((1, 1)),
-            nn.Flatten(),
-            nn.Linear(128, 128),
+            nn.Linear(196, 128),
             nn.ReLU(inplace=True),
             nn.Dropout(0.2),
             nn.Linear(128, 2),
@@ -70,13 +92,22 @@ class Model(nn.Module):
             layers.append(BasicBlock(out_channels, out_channels, stride=1))
         return nn.Sequential(*layers)
 
-    def forward(self, x):
-        x = self.stem(x)
+    def forward(self, full_img, left_img, right_img, coords):
+        # Global context
+        x = self.stem(full_img)
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        x = self.head(x)   # shape: (batch, 2)
-        return x
+        global_feat = self.flatten(self.global_pool(x))
+        
+        # Local eye features
+        left_feat = self.left_eye(left_img)
+        right_feat = self.right_eye(right_img)
+        
+        # Concat all + coords
+        concat_feat = torch.cat([global_feat, left_feat, right_feat, coords], dim=1)
+        
+        return self.head(concat_feat)
 
     def save_model(self, path):
         torch.save(self.state_dict(), path)

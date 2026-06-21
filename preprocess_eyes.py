@@ -5,7 +5,7 @@ import numpy as np
 from ultralytics import YOLO
 from tqdm import tqdm
 
-def get_eye_crop(image, keypoint, width=41, height=31):
+def get_eye_crop(image, keypoint, width=17, height=13):
     """Crop eye given center keypoint. Fallback to black image if out of bounds/invalid."""
     fallback = np.zeros((height, width, 3), dtype=np.uint8)
     if keypoint[0] < 0 or keypoint[1] < 0:
@@ -54,8 +54,8 @@ def main():
         results = model(image, verbose=False)
         
         lx, ly, rx, ry = -1.0, -1.0, -1.0, -1.0
-        left_eye_crop = np.zeros((31, 41, 3), dtype=np.uint8)
-        right_eye_crop = np.zeros((31, 41, 3), dtype=np.uint8)
+        left_eye_crop = np.zeros((13, 17, 3), dtype=np.uint8)
+        right_eye_crop = np.zeros((13, 17, 3), dtype=np.uint8)
         
         if len(results) > 0 and len(results[0].keypoints) > 0:
             # Check if keypoints are present

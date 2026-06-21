@@ -10,6 +10,8 @@ import cv2
 import torch
 from model import Model
 from torchvision import transforms
+from ultralytics import YOLO
+from preprocess_eyes import get_eye_crop
 
 class LiveTester:
     def __init__(self, model_path="best_model.pth", width=1500, height=840):
@@ -42,6 +44,9 @@ class LiveTester:
         self.model.to(self.device)
         self.model.eval()
         
+        # Load YOLO
+        self.yolo = YOLO("yolov8n-pose.pt")
+        
         # Define transform for RGB input (EXACTLY as in training)
         class ToTensorRGB(object):
             """Convert numpy image to PyTorch tensor and normalize."""
@@ -60,7 +65,7 @@ class LiveTester:
     def process_webcam_frame(self):
         ret, frame = self.cap.read()
         if not ret:
-            return None, None
+            return None, None, None, None, None
         
         # Process frame EXACTLY the same way as in dataset generation
         # Crop to 1080x1080 (HARDCODED like in training)
@@ -73,7 +78,7 @@ class LiveTester:
         # Ensure we have enough pixels
         if width < right_x or height < 1080:
             print(f"Warning: Webcam resolution {width}x{height} is too small for 1080x1080 crop")
-            return None, None
+            return None, None, None, None, None
         
         # Crop to 1080x1080 (same as training)
         cropped_frame = frame[:, left_x:right_x, :]
@@ -83,18 +88,36 @@ class LiveTester:
         # Convert BGR to RGB EXACTLY as in training
         model_input = cv2.cvtColor(model_input, cv2.COLOR_BGR2RGB)
         
+        # Run YOLO to get eye crops
+        results = self.yolo(model_input, verbose=False)
+        lx, ly, rx, ry = -1.0, -1.0, -1.0, -1.0
+        left_eye_crop = np.zeros((13, 17, 3), dtype=np.uint8)
+        right_eye_crop = np.zeros((13, 17, 3), dtype=np.uint8)
+        
+        if len(results) > 0 and len(results[0].keypoints) > 0:
+            if hasattr(results[0].keypoints, 'xy') and len(results[0].keypoints.xy) > 0:
+                keypoints = results[0].keypoints.xy[0].cpu().numpy()
+                if len(keypoints) >= 3:
+                    l_kp = keypoints[1]
+                    r_kp = keypoints[2]
+                    left_eye_crop, lx, ly = get_eye_crop(model_input, l_kp)
+                    right_eye_crop, rx, ry = get_eye_crop(model_input, r_kp)
+                    
         # Display image (resize for display)
         display_frame = cv2.resize(cropped_frame, (400, 400))
         display_frame = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)
         
-        return model_input, display_frame
+        return model_input, display_frame, left_eye_crop, right_eye_crop, np.array([lx, ly, rx, ry], dtype=np.float32)
     
-    def predict_gaze(self, image):
+    def predict_gaze(self, image, left_eye, right_eye, coords):
         # Convert image to tensor and normalize
         image_tensor = self.transform(image).unsqueeze(0).to(self.device)
+        left_tensor = self.transform(left_eye).unsqueeze(0).to(self.device)
+        right_tensor = self.transform(right_eye).unsqueeze(0).to(self.device)
+        coords_tensor = torch.from_numpy(coords).unsqueeze(0).to(self.device)
         
         with torch.no_grad():
-            predictions = self.model(image_tensor)
+            predictions = self.model(image_tensor, left_tensor, right_tensor, coords_tensor)
         
         # Get normalized coordinates (0-1) for consistency with training
         norm_x = predictions[0, 0].item()
@@ -124,11 +147,11 @@ class LiveTester:
             self.screen.fill((0, 0, 0))
             
             # Process webcam frame
-            model_input, display_frame = self.process_webcam_frame()
+            model_input, display_frame, left_eye, right_eye, coords = self.process_webcam_frame()
             
             if model_input is not None and display_frame is not None:
                 # Make prediction
-                pred_x, pred_y, norm_x, norm_y = self.predict_gaze(model_input)
+                pred_x, pred_y, norm_x, norm_y = self.predict_gaze(model_input, left_eye, right_eye, coords)
                 
                 # Convert numpy array to pygame surface for display
                 webcam_surface = pygame.surfarray.make_surface(display_frame.swapaxes(0, 1))

@@ -40,14 +40,14 @@ class BasicBlock(nn.Module):
         return out
 
 class EyeBranch(nn.Module):
-    # Compact CNN for 31x41 eye crops
+    # Compact CNN for 13x17 eye crops
     def __init__(self):
         super().__init__()
         self.net = nn.Sequential(
             nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(16),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(2), # 31x41 -> 15x20
+            nn.MaxPool2d(2), # 13x17 -> 6x8
             nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(32),
             nn.ReLU(inplace=True),

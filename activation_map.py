@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 from torchvision import transforms
 from model import Model
 import pygame
+from ultralytics import YOLO
+from preprocess_eyes import get_eye_crop
 from PIL import Image
 import os
 import time
@@ -52,13 +54,13 @@ class GradCAM:
         for hook in self.hooks:
             hook.remove()
             
-    def generate_cam(self, input_image):
+    def generate_cam(self, input_image, left_tensor, right_tensor, coords_tensor):
         """
         input_image: (1,3,H,W) tensor
         Retourne cam numpy (Hc, Wc) upsamplée à l'entrée ensuite par l'appelant.
         """
         # Forward
-        output = self.model(input_image)          # (1,2)
+        output = self.model(input_image, left_tensor, right_tensor, coords_tensor)          # (1,2)
         score = output.sum()                      # scalaire pour backprop
 
         # Backward
@@ -107,6 +109,9 @@ class ActivationMapVisualizer:
         self.model.to(self.device)
         self.model.eval()
         
+        # Load YOLO
+        self.yolo = YOLO("yolov8n-pose.pt")
+        
         # Define transform for RGB input (EXACTLY as in training)
         class ToTensorRGB(object):
             """Convert numpy image to PyTorch tensor and normalize."""
@@ -130,7 +135,7 @@ class ActivationMapVisualizer:
     def process_webcam_frame(self):
         ret, frame = self.cap.read()
         if not ret:
-            return None, None
+            return None, None, None, None, None
         
         # Process frame EXACTLY the same way as in dataset generation
         # Crop to 1080x1080 (HARDCODED like in training)
@@ -143,7 +148,7 @@ class ActivationMapVisualizer:
         # Ensure we have enough pixels
         if width < right_x or height < 1080:
             print(f"Warning: Webcam resolution {width}x{height} is too small for 1080x1080 crop")
-            return None, None
+            return None, None, None, None, None
         
         # Crop to 1080x1080 (same as training)
         cropped_frame = frame[:, left_x:right_x, :]
@@ -152,18 +157,36 @@ class ActivationMapVisualizer:
         model_input = cv2.resize(cropped_frame, (224, 224))
         model_input = cv2.cvtColor(model_input, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
         
+        # Run YOLO
+        results = self.yolo(model_input, verbose=False)
+        lx, ly, rx, ry = -1.0, -1.0, -1.0, -1.0
+        left_eye_crop = np.zeros((13, 17, 3), dtype=np.uint8)
+        right_eye_crop = np.zeros((13, 17, 3), dtype=np.uint8)
+        
+        if len(results) > 0 and len(results[0].keypoints) > 0:
+            if hasattr(results[0].keypoints, 'xy') and len(results[0].keypoints.xy) > 0:
+                keypoints = results[0].keypoints.xy[0].cpu().numpy()
+                if len(keypoints) >= 3:
+                    l_kp = keypoints[1]
+                    r_kp = keypoints[2]
+                    left_eye_crop, lx, ly = get_eye_crop(model_input, l_kp)
+                    right_eye_crop, rx, ry = get_eye_crop(model_input, r_kp)
+        
         # Display image
         display_frame = cv2.resize(cropped_frame, (400, 400))  # Resize for display
         display_frame = cv2.cvtColor(display_frame, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
         
-        return model_input, display_frame
+        return model_input, display_frame, left_eye_crop, right_eye_crop, np.array([lx, ly, rx, ry], dtype=np.float32)
     
-    def predict_with_activation_map(self, image):
+    def predict_with_activation_map(self, image, left_eye, right_eye, coords):
         # Convert image to tensor and normalize
         image_tensor = self.transform(image).unsqueeze(0).to(self.device)
+        left_tensor = self.transform(left_eye).unsqueeze(0).to(self.device)
+        right_tensor = self.transform(right_eye).unsqueeze(0).to(self.device)
+        coords_tensor = torch.from_numpy(coords).unsqueeze(0).to(self.device)
         
         # Get activation map
-        cam = self.grad_cam.generate_cam(image_tensor)
+        cam = self.grad_cam.generate_cam(image_tensor, left_tensor, right_tensor, coords_tensor)
         
         # Resize CAM to the size of the input image
         cam = cv2.resize(cam, (224, 224), interpolation=cv2.INTER_CUBIC)
@@ -178,7 +201,7 @@ class ActivationMapVisualizer:
         
         # Get prediction
         with torch.no_grad():
-            predictions = self.model(image_tensor)
+            predictions = self.model(image_tensor, left_tensor, right_tensor, coords_tensor)
         
         # Get x, y coordinates (keep normalized for consistency with training)
         x = predictions[0, 0].item()
@@ -220,11 +243,11 @@ class ActivationMapVisualizer:
             self.screen.fill((0, 0, 0))
             
             # Process webcam frame
-            model_input, display_frame = self.process_webcam_frame()
+            model_input, display_frame, left_eye, right_eye, coords = self.process_webcam_frame()
             
             if model_input is not None and display_frame is not None:
                 # Make prediction with activation map
-                pred_x, pred_y, superimposed, cam, norm_x, norm_y = self.predict_with_activation_map(model_input)
+                pred_x, pred_y, superimposed, cam, norm_x, norm_y = self.predict_with_activation_map(model_input, left_eye, right_eye, coords)
                 
                 # Add prediction to buffer with current timestamp
                 current_time = time.time() * 1000  # Convert to milliseconds
@@ -343,11 +366,32 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
         img = img.resize((224, 224))
         img_array = np.array(img)
         
+        # In analyze dataset, we also need to run YOLO
+        yolo_model = YOLO("yolov8n-pose.pt")
+        results = yolo_model(img_array, verbose=False)
+        lx, ly, rx, ry = -1.0, -1.0, -1.0, -1.0
+        left_eye_crop = np.zeros((13, 17, 3), dtype=np.uint8)
+        right_eye_crop = np.zeros((13, 17, 3), dtype=np.uint8)
+        
+        if len(results) > 0 and len(results[0].keypoints) > 0:
+            if hasattr(results[0].keypoints, 'xy') and len(results[0].keypoints.xy) > 0:
+                keypoints = results[0].keypoints.xy[0].cpu().numpy()
+                if len(keypoints) >= 3:
+                    l_kp = keypoints[1]
+                    r_kp = keypoints[2]
+                    left_eye_crop, lx, ly = get_eye_crop(img_array, l_kp)
+                    right_eye_crop, rx, ry = get_eye_crop(img_array, r_kp)
+                    
+        coords = np.array([lx, ly, rx, ry], dtype=np.float32)
+
         # Transform image (convert PIL to numpy first)
         img_tensor = transform(img_array).unsqueeze(0).to(device)
+        left_tensor = transform(left_eye_crop).unsqueeze(0).to(device)
+        right_tensor = transform(right_eye_crop).unsqueeze(0).to(device)
+        coords_tensor = torch.from_numpy(coords).unsqueeze(0).to(device)
         
         # Generate activation map
-        cam = grad_cam.generate_cam(img_tensor)
+        cam = grad_cam.generate_cam(img_tensor, left_tensor, right_tensor, coords_tensor)
         
         # Resize CAM to the size of the input image
         cam = cv2.resize(cam, (224, 224))
@@ -361,7 +405,7 @@ def analyze_dataset_samples(dataset_path, model_path="best_model.pth", num_sampl
         
         # Get prediction
         with torch.no_grad():
-            predictions = model(img_tensor)
+            predictions = model(img_tensor, left_tensor, right_tensor, coords_tensor)
         
         pred_x = predictions[0, 0].item()
         pred_y = predictions[0, 1].item()
